@@ -216,6 +216,7 @@
     <string name="freeturn_advanced_settings">Advanced Settings</string>
     <string name="webdav_poll_min">Poll min</string>
     <string name="webdav_poll_max">Poll max</string>
+    <string name="webdav_poll_idle">Poll idle</string>
     <string name="webdav_chunk_size">Chunk size</string>
     <string name="webdav_puts">Puts</string>
     <string name="webdav_read_min">Read min</string>

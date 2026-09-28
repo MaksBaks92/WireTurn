@@ -467,6 +467,14 @@ fun WebdavConfigScreen(
                 }
                 SectionItem {
                     TextFieldRow(
+                        label = stringResource(R.string.webdav_poll_idle),
+                        value = config.pollIdle,
+                        onValueChange = { config = config.copy(pollIdle = it) },
+                        isModified = isEditMode && config.pollIdle != initialConfig.pollIdle
+                    )
+                }
+                SectionItem {
+                    TextFieldRow(
                         label = stringResource(R.string.webdav_timeout),
                         value = config.timeout,
                         onValueChange = { config = config.copy(timeout = it) },

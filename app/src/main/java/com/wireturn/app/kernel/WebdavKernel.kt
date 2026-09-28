@@ -84,6 +84,7 @@ object WebdavKernel : Kernel {
             appendLine("tuning:")
             appendLine("  poll-min: \"${esc(o.pollMin)}\"")
             appendLine("  poll-max: \"${esc(o.pollMax)}\"")
+            appendLine("  poll-idle: \"${esc(o.pollIdle)}\"")
             appendLine("  coalesce: \"${esc(o.coalesce)}\"")
             appendLine("  chunk-size: ${o.chunkSize.toIntOrNull() ?: 131071}")
             appendLine("  puts: ${o.puts.toIntOrNull() ?: 8}")

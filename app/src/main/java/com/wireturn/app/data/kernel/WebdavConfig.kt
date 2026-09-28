@@ -71,6 +71,10 @@ data class WebdavConfig(
     @SerializedName("timeout") val timeout: String = "60s",
     @SerializedName("poll_max") val pollMax: String = "500ms",
     @SerializedName("poll_min") val pollMin: String = "200ms",
+    // Polling ceiling after 10s without traffic (webdav-tunnel 0.3.0+ -poll-idle) - saves requests
+    // to rate-limited storage at the cost of up to this much delay on the first request after a
+    // pause. "0" disables.
+    @SerializedName("poll_idle") val pollIdle: String = "2s",
     @SerializedName("coalesce") val coalesce: String = "10ms",
     @SerializedName("chunk_size") val chunkSize: String = "131071",
     @SerializedName("puts") val puts: String = "8",
@@ -83,6 +87,7 @@ data class WebdavConfig(
         timeout = timeout.ifBlank { "60s" },
         pollMax = pollMax.ifBlank { "500ms" },
         pollMin = pollMin.ifBlank { "200ms" },
+        pollIdle = pollIdle.ifBlank { "2s" },
         coalesce = coalesce.ifBlank { "10ms" },
         chunkSize = chunkSize.ifBlank { "131071" },
         puts = puts.ifBlank { "8" },
@@ -121,6 +126,7 @@ data class WebdavConfig(
         builder.appendQueryParameter("timeout", timeout)
         builder.appendQueryParameter("poll-min", pollMin)
         builder.appendQueryParameter("poll-max", pollMax)
+        builder.appendQueryParameter("poll-idle", pollIdle)
         builder.appendQueryParameter("coalesce", coalesce)
         builder.appendQueryParameter("chunk-size", chunkSize)
         builder.appendQueryParameter("puts", puts)
@@ -170,6 +176,7 @@ data class WebdavConfig(
                     timeout = uri.getQueryParameter("timeout") ?: current.timeout,
                     pollMin = uri.getQueryParameter("poll-min") ?: current.pollMin,
                     pollMax = uri.getQueryParameter("poll-max") ?: current.pollMax,
+                    pollIdle = uri.getQueryParameter("poll-idle") ?: current.pollIdle,
                     coalesce = uri.getQueryParameter("coalesce") ?: current.coalesce,
                     chunkSize = uri.getQueryParameter("chunk-size") ?: current.chunkSize,
                     puts = uri.getQueryParameter("puts") ?: current.puts,

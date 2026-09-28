@@ -166,7 +166,7 @@ olcrtc://wbstream?vp8channel<vp8-fps=60&vp8-batch=64>@room123#abc$user_1
 ### 2.3 `webdav://` / `webdavs://`
 
 ```
-webdavs://[login[:password]@]host[:port][/path]?timeout=60s&poll-min=200ms&poll-max=500ms&coalesce=10ms&chunk-size=131071&puts=8&read-min=3&read-max=8&enc=1&dns=1.1.1.1:53&backend=[nested_uri]&backend=...#[profile_name]
+webdavs://[login[:password]@]host[:port][/path]?timeout=60s&poll-min=200ms&poll-max=500ms&poll-idle=2s&coalesce=10ms&chunk-size=131071&puts=8&read-min=3&read-max=8&enc=1&dns=1.1.1.1:53&backend=[nested_uri]&backend=...#[profile_name]
 ```
 
 Схема `webdavs://` = HTTPS, `webdav://` = HTTP. Логин/пароль — стандартный userinfo. Все параметры интервалов опциональны (есть значения по умолчанию); `enc=1` включает шифрование. Фрагмент — имя профиля.
@@ -174,6 +174,7 @@ webdavs://[login[:password]@]host[:port][/path]?timeout=60s&poll-min=200ms&poll-
 | Параметр | Описание |
 | :--- | :--- |
 | `dns` | Необязательный DNS-сервер (`host:port`, порт по умолчанию `53`) для резолвинга **только хоста самого WebDAV-бэкенда** — полезно, если системный DNS фильтрует/блокирует адрес бэкенда. На туннелируемый через SOCKS5 трафик не влияет: адреса назначения там всегда резолвятся на сервере ядра, а не на клиенте. |
+| `poll-idle` | Потолок интервала опроса после 10 с без трафика (по умолчанию `2s`, `0` — выключено). Экономит запросы к хранилищам с лимитами ценой задержки до этого значения на первый запрос после паузы. Требует webdav-tunnel 0.3.0+. |
 | `backend` | Повторяемый параметр — один или несколько **дополнительных** WebDAV-бэкендов для ротации (см. ниже). Основной бэкенд — тот, что в userinfo/host самой ссылки. |
 
 Пример:
