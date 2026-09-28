@@ -67,6 +67,7 @@ import com.wireturn.app.R
 import com.wireturn.app.data.kernel.OpenFluxConfig
 import com.wireturn.app.ui.AppDropdownMenu
 import com.wireturn.app.ui.AppTopAppBar
+import com.wireturn.app.ui.ExpandableSection
 import com.wireturn.app.ui.HapticUtil
 import com.wireturn.app.ui.ItemPosition
 import com.wireturn.app.ui.LargeLeadingIcon
@@ -461,8 +462,11 @@ fun OpenFluxConfigScreen(
             }
 
             // Optional, transport-agnostic - works on top of yandex/vyandex/oneme alike.
+            // The context only ever differs from the url for cupsonline (see
+            // OpenFluxConfig.sessionContext), and only matters with a key.
+            val showSessionContext = config.transport == "cupsonline" && config.encryptionKey.isNotBlank()
             SectionGroup(title = stringResource(R.string.openflux_encryption_settings_title)) {
-                SectionItem(position = ItemPosition.Single) {
+                SectionItem(position = if (showSessionContext) ItemPosition.Top else ItemPosition.Single) {
                     TextFieldRow(
                         label = stringResource(R.string.openflux_encryption_key_label),
                         value = config.encryptionKey.redact(isPrivacyActive),
@@ -474,6 +478,21 @@ fun OpenFluxConfigScreen(
                         supportingText = stringResource(R.string.openflux_encryption_key_desc),
                         isSecret = true
                     )
+                }
+
+                ExpandableSection(visible = showSessionContext) {
+                    SectionItem(position = ItemPosition.Bottom) {
+                        TextFieldRow(
+                            label = stringResource(R.string.openflux_session_context_label),
+                            value = config.sessionContext.redact(isPrivacyActive),
+                            onValueChange = { if (!isPrivacyActive) config = config.copy(sessionContext = it) },
+                            readOnly = isPrivacyActive,
+                            isModified = isEditMode && config.sessionContext != initialConfig.sessionContext,
+                            privacyMode = isPrivacyActive,
+                            placeholder = OpenFluxConfig.CUPS_CREATED_ROOMS_CONTEXT,
+                            supportingText = stringResource(R.string.openflux_session_context_desc)
+                        )
+                    }
                 }
             }
         }

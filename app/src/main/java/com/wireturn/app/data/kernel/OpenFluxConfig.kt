@@ -44,9 +44,9 @@ data class OpenFluxConfig(
     @SerializedName("legacy_codec") val legacyCodec: Boolean = false,
     // The encryption context (--session-context) when it isn't the room list itself: a
     // cupsonline exit that created its rooms at start has no --url and derives "http://#", while
-    // a client passing those rooms as --url would derive the rooms - different keys. Only set
-    // from an openflux://v1/ link's "context", and only ever used for cupsonline; blank = the
-    // core's own derivation (the --url).
+    // a client passing those rooms as --url would derive the rooms - different keys. Set from an
+    // openflux://v1/ link's "context" or by hand on the config screen, and only ever used for
+    // cupsonline; blank = the core's own derivation (the --url).
     @SerializedName("session_context") val sessionContext: String = ""
 ) {
     val platformDisplayName: String
@@ -140,6 +140,10 @@ data class OpenFluxConfig(
 
     companion object {
         const val V1_PREFIX = "openflux://v1/"
+
+        // What a cupsonline exit started without --url derives as its encryption context (the
+        // core's placeholder --url) - see sessionContext.
+        const val CUPS_CREATED_ROOMS_CONTEXT = "http://#"
 
         // share.go's maxPayload: bounds the inflated JSON against a crafted link.
         private const val V1_MAX_PAYLOAD = 16 shl 10

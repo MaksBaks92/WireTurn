@@ -206,6 +206,8 @@
     <string name="openflux_legacy_codec_desc">Use the old per-packet codec instead of the default batched one - only needed if your exit-node hasn\'t been updated yet. Both ends must match.</string>
     <string name="openflux_encryption_key_label">Shared secret</string>
     <string name="openflux_encryption_key_desc">Optional AES-256-GCM encryption on top of the transport - both ends must use the same secret (16+ characters).</string>
+    <string name="openflux_session_context_label">Encryption context</string>
+    <string name="openflux_session_context_desc">If the node created the rooms itself - http://#. Empty - the room string</string>
     <string name="webdav_url_label">WebDAV URL</string>
     <string name="webdav_url_desc">URL of the WebDAV storage</string>
     <string name="webdav_login_label">Login</string>
