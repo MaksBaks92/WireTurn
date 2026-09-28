@@ -565,10 +565,16 @@ fun ProfilesDialog(
     val errorEmpty = stringResource(R.string.import_error_empty)
     val errorInvalidProfile = stringResource(R.string.import_error_invalid_profile)
     val errorServerFormat = stringResource(R.string.import_error_server)
+    val errorTls = stringResource(R.string.import_error_tls)
+    val errorInsecureHttp = stringResource(R.string.import_insecure_http_title)
 
     fun showSubUpdateError(status: ImportStatus) {
         val message = when (status) {
             is ImportStatus.NetworkError -> errorConnection
+            is ImportStatus.TlsError -> errorTls
+            // Not expected on a refresh (a subscription already added is confirmed), kept for
+            // exhaustiveness.
+            is ImportStatus.InsecureHttp -> errorInsecureHttp
             is ImportStatus.ServerError -> errorServerFormat.format(status.code)
             is ImportStatus.EmptyResponse -> errorEmpty
             is ImportStatus.InvalidFormat -> errorInvalidProfile

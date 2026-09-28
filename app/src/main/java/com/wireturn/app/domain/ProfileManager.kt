@@ -39,6 +39,12 @@ sealed class ImportStatus {
     data class Success(val id: String? = null, val summary: ImportResult? = null) : ImportStatus()
     data class KernelConfigDetected(val type: String, val json: String, val source: String) : ImportStatus()
     object NetworkError : ImportStatus()
+    // The server's TLS certificate wasn't accepted (untrusted, e.g. self-signed, or issued for
+    // another name) - not a connectivity problem, so not NetworkError.
+    object TlsError : ImportStatus()
+    // A new cleartext http:// subscription on a non-local host: its keys and server addresses
+    // would travel readable and forgeable, so the user confirms it first - see fetchSubscription.
+    data class InsecureHttp(val url: String) : ImportStatus()
     data class ServerError(val code: Int) : ImportStatus()
     object EmptyResponse : ImportStatus()
     object InvalidFormat : ImportStatus()
@@ -581,17 +587,28 @@ class ProfileManager(
         }
     }
 
-    suspend fun fetchSubscription(url: String, forceId: String? = null, onAutoSelect: ((Profile) -> Unit)? = null): ImportStatus = withContext(Dispatchers.IO) {
+    suspend fun fetchSubscription(
+        url: String,
+        forceId: String? = null,
+        allowInsecureHttp: Boolean = false,
+        onAutoSelect: ((Profile) -> Unit)? = null
+    ): ImportStatus = withContext(Dispatchers.IO) {
         val subIdToMark = forceId ?: subscriptions.value.find { it.url == url }?.id
         subIdToMark?.let { id -> _updatingSubIds.update { it + id } }
         val startTime = System.currentTimeMillis()
 
-        // Defense in depth: the network security config permits cleartext app-wide (it has to, for
-        // arbitrary LAN subscription servers), so enforce HTTPS for non-local hosts here instead.
-        if (url.startsWith("http://") && !isLocalNetworkHost(url)) {
-            com.wireturn.app.AppLogsState.addLog("Subscription Error: refusing cleartext HTTP to non-local host")
-            subIdToMark?.let { id -> _updatingSubIds.update { it - id } }
-            return@withContext ImportStatus.NetworkError
+        // The network security config permits cleartext app-wide (it has to, for arbitrary LAN
+        // subscription servers), so a non-local http:// is gated here: a new one needs the user's
+        // confirmation (InsecureHttp), one already added - confirmed then, or added before this
+        // check existed - updates as before. Panels without a domain (3x-ui on a bare IP) often
+        // serve nothing else.
+        if (url.startsWith("http://", ignoreCase = true) && !isLocalNetworkHost(url)) {
+            if (!allowInsecureHttp && subscriptions.value.none { it.url == url }) {
+                com.wireturn.app.AppLogsState.addLog("Subscription: cleartext HTTP to a non-local host needs confirmation")
+                subIdToMark?.let { id -> _updatingSubIds.update { it - id } }
+                return@withContext ImportStatus.InsecureHttp(url)
+            }
+            com.wireturn.app.AppLogsState.addLog("Subscription Warning: cleartext HTTP to a non-local host")
         }
 
         val proxy = activeLocalSocksProxy()
@@ -624,7 +641,7 @@ class ProfileManager(
             // previously these could throw past this point uncaught, permanently killing the auto-update loop.
             com.wireturn.app.AppLogsState.addLog("Subscription Error: ${e.javaClass.simpleName} - ${e.message}")
             subIdToMark?.let { id -> _updatingSubIds.update { it - id } }
-            return@withContext ImportStatus.NetworkError
+            return@withContext failureStatus(e)
         }
 
         try {
@@ -751,7 +768,7 @@ class ProfileManager(
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             com.wireturn.app.AppLogsState.addLog("Subscription Error: ${e.javaClass.simpleName} - ${e.message}")
-            ImportStatus.NetworkError
+            failureStatus(e)
         } finally {
             subIdToMark?.let { id -> _updatingSubIds.update { it - id } }
             connection.disconnect()
@@ -1151,6 +1168,18 @@ class ProfileManager(
      * be null if that number wasn't present. "used" is upload+download combined, matching how
      * this header is interpreted across the V2Ray/Xray-adjacent subscription ecosystem.
      */
+    // A rejected certificate (untrusted issuer, e.g. self-signed, or a name mismatch) surfaces
+    // as an SSLHandshakeException/SSLPeerUnverifiedException wrapping these - unlike a handshake
+    // merely cut off by the network, which stays a NetworkError.
+    private fun failureStatus(e: Throwable): ImportStatus {
+        val certificateRejected = generateSequence(e) { it.cause }.any {
+            it is java.security.cert.CertificateException ||
+                it is java.security.cert.CertPathValidatorException ||
+                it is javax.net.ssl.SSLPeerUnverifiedException
+        }
+        return if (certificateRejected) ImportStatus.TlsError else ImportStatus.NetworkError
+    }
+
     private fun parseSubscriptionUserinfo(header: String?): Pair<Long?, Long?> {
         if (header == null) return null to null
         val fields = header.split(";").mapNotNull { part ->

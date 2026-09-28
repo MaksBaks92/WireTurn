@@ -26,7 +26,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBarDefaults
@@ -97,7 +100,10 @@ class AddProfileActivity : ComponentActivity() {
             val errorConnection = stringResource(R.string.import_error_connection)
             val errorEmpty = stringResource(R.string.import_error_empty)
             val amneziaWgUnsupported = stringResource(R.string.import_amneziawg_unsupported)
+            val errorTls = stringResource(R.string.import_error_tls)
             val scrollState = rememberScrollState()
+            // A cleartext http:// subscription waiting for the user's go-ahead.
+            var pendingInsecureUrl by remember { mutableStateOf<String?>(null) }
 
             fun handleImportResult(status: ImportStatus) {
                 when (status) {
@@ -112,6 +118,13 @@ class AddProfileActivity : ComponentActivity() {
                     is ImportStatus.NetworkError -> {
                         HapticUtil.perform(this@AddProfileActivity, HapticUtil.Pattern.ERROR)
                         this@AddProfileActivity.showExclusiveToast(errorConnection)
+                    }
+                    is ImportStatus.TlsError -> {
+                        HapticUtil.perform(this@AddProfileActivity, HapticUtil.Pattern.ERROR)
+                        this@AddProfileActivity.showExclusiveToast(errorTls)
+                    }
+                    is ImportStatus.InsecureHttp -> {
+                        pendingInsecureUrl = status.url
                     }
                     is ImportStatus.ServerError -> {
                         HapticUtil.perform(this@AddProfileActivity, HapticUtil.Pattern.ERROR)
@@ -394,6 +407,33 @@ class AddProfileActivity : ComponentActivity() {
                         onResult = { result ->
                             showQrScanner.value = false
                             performSmartImport(result)
+                        }
+                    )
+                }
+
+                pendingInsecureUrl?.let { url ->
+                    AlertDialog(
+                        onDismissRequest = { pendingInsecureUrl = null },
+                        title = { Text(stringResource(R.string.import_insecure_http_title)) },
+                        text = { Text(stringResource(R.string.import_insecure_http_note)) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                pendingInsecureUrl = null
+                                HapticUtil.perform(this@AddProfileActivity, HapticUtil.Pattern.CLICK)
+                                isImporting = true
+                                scope.launch {
+                                    val status = try {
+                                        viewModel.smartImport(url, allowInsecureHttp = true)
+                                    } catch (_: Exception) {
+                                        ImportStatus.NetworkError
+                                    }
+                                    isImporting = false
+                                    handleImportResult(status)
+                                }
+                            }) { Text(stringResource(R.string.btn_add)) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { pendingInsecureUrl = null }) { Text(stringResource(R.string.cancel)) }
                         }
                     )
                 }

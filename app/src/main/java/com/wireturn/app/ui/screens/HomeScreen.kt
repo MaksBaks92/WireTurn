@@ -887,6 +887,7 @@ fun HomeScreen(
             val importProfilesSuccessMsg = stringResource(R.string.import_profiles_success)
             val importSubscriptionSuccessMsg = stringResource(R.string.import_subscription_success)
             val importErrorMsg = stringResource(R.string.import_error)
+            val importTlsErrorMsg = stringResource(R.string.import_error_tls)
 
             fun dismissDeepLink() {
                 deepLinkImportJob?.cancel()
@@ -915,12 +916,14 @@ fun HomeScreen(
                     isImportingDeepLink = true
                     deepLinkImportJob = scope.launch {
                         try {
-                            val status = viewModel.smartImport(url)
+                            val status = viewModel.smartImport(url, allowInsecureHttp = true)
                             if (status is com.wireturn.app.domain.ImportStatus.Success) {
                                 context.showExclusiveToast(importSubscriptionSuccessMsg)
                                 revealInProfilesList(status.id)
                             } else {
-                                context.showExclusiveToast(importErrorMsg)
+                                context.showExclusiveToast(
+                                    if (status is com.wireturn.app.domain.ImportStatus.TlsError) importTlsErrorMsg else importErrorMsg
+                                )
                             }
                         } finally {
                             isImportingDeepLink = false
@@ -950,12 +953,15 @@ fun HomeScreen(
                 isImportingDeepLink = true
                 deepLinkImportJob = scope.launch {
                     try {
-                        val status = viewModel.smartImport(url)
+                        // The dialog's "Add" is also the go-ahead for a cleartext http:// link.
+                        val status = viewModel.smartImport(url, allowInsecureHttp = true)
                         if (status is com.wireturn.app.domain.ImportStatus.Success) {
                             context.showExclusiveToast(importSubscriptionSuccessMsg)
                             revealInProfilesList(status.id)
                         } else {
-                            context.showExclusiveToast(importErrorMsg)
+                            context.showExclusiveToast(
+                                if (status is com.wireturn.app.domain.ImportStatus.TlsError) importTlsErrorMsg else importErrorMsg
+                            )
                         }
                     } finally {
                         isImportingDeepLink = false
@@ -1030,10 +1036,25 @@ fun HomeScreen(
                         try {
                             deepLinkPreview.url.toUri().host } catch (_: Exception) { null } ?: deepLinkPreview.url
                     }
+                    // Confirming this dialog is also the go-ahead for a cleartext http://
+                    // subscription (ImportStatus.InsecureHttp), so its warning goes right here.
+                    val insecure = remember(deepLinkPreview.url) {
+                        deepLinkPreview.url.startsWith("http://", ignoreCase = true) &&
+                            !com.wireturn.app.domain.isLocalNetworkHost(deepLinkPreview.url)
+                    }
                     AlertDialog(
                         onDismissRequest = { dismissDeepLink() },
                         title = { Text(stringResource(R.string.deep_link_import_subscription_title, host)) },
-                        text = { Text(stringResource(R.string.deep_link_import_subscription_desc)) },
+                        text = {
+                            Text(
+                                if (insecure) {
+                                    stringResource(R.string.deep_link_import_subscription_desc) + "\n\n" +
+                                        stringResource(R.string.import_insecure_http_note)
+                                } else {
+                                    stringResource(R.string.deep_link_import_subscription_desc)
+                                }
+                            )
+                        },
                         confirmButton = {
                             TextButton(
                                 onClick = { confirmDeepLinkSubscription(deepLinkPreview.url) },

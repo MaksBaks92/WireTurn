@@ -88,6 +88,9 @@
     <string name="import_error_connection">Connection failed. Check your internet.</string>
     <string name="import_error_server">Server returned an error: %1$d</string>
     <string name="import_error_empty">Server returned empty response</string>
+    <string name="import_error_tls">The subscription server\'s certificate was not accepted</string>
+    <string name="import_insecure_http_title">Unencrypted subscription</string>
+    <string name="import_insecure_http_note">The link uses HTTP: the subscription\'s keys and server addresses travel unencrypted and can be intercepted or altered on the way.</string>
     <string name="import_amneziawg_unsupported">AmneziaWG from the link is not supported, WireGuard not filled in</string>
     <string name="profile_import_partial_failure">Imported, but %1$d of %2$d files failed</string>
 

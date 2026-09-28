@@ -844,12 +844,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return result to imported
     }
 
-    suspend fun smartImport(text: String): com.wireturn.app.domain.ImportStatus {
+    // allowInsecureHttp: the user already confirmed a cleartext http:// subscription (see
+    // ImportStatus.InsecureHttp).
+    suspend fun smartImport(text: String, allowInsecureHttp: Boolean = false): com.wireturn.app.domain.ImportStatus {
         val trimmed = text.trim()
 
         // 1. Subscription
         if (trimmed.startsWith("https://") || trimmed.startsWith("http://")) {
-            return profileManager.fetchSubscription(trimmed) {
+            return profileManager.fetchSubscription(trimmed, allowInsecureHttp = allowInsecureHttp) {
                 selectProfileAndRestart(it.id, it)
             }
         }
@@ -862,7 +864,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (json != null) {
                 val decodedTrimmed = json.trim()
                 if (decodedTrimmed.startsWith("https://") || decodedTrimmed.startsWith("http://")) {
-                    return profileManager.fetchSubscription(decodedTrimmed) {
+                    return profileManager.fetchSubscription(decodedTrimmed, allowInsecureHttp = allowInsecureHttp) {
                         selectProfileAndRestart(it.id, it)
                     }
                 }
