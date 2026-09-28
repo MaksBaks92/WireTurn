@@ -516,13 +516,29 @@ fun WebdavConfigScreen(
                         isModified = isEditMode && config.readMin != initialConfig.readMin
                     )
                 }
-                SectionItem(position = ItemPosition.Bottom) {
+                SectionItem {
                     TextFieldRow(
                         label = stringResource(R.string.webdav_read_max),
                         value = config.readMax,
                         onValueChange = { config = config.copy(readMax = it) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         isModified = isEditMode && config.readMax != initialConfig.readMax
+                    )
+                }
+                SectionItem(
+                    position = ItemPosition.Bottom,
+                    onClick = {
+                        val next = !config.tlsChrome
+                        HapticUtil.perform(context, if (next) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF)
+                        config = config.copy(tlsChrome = next)
+                    }
+                ) {
+                    SwitchRow(
+                        label = stringResource(R.string.webdav_tls_chrome),
+                        checked = config.tlsChrome,
+                        onCheckedChange = { config = config.copy(tlsChrome = it) },
+                        supportingText = stringResource(R.string.webdav_tls_chrome_desc),
+                        isModified = isEditMode && config.tlsChrome != initialConfig.tlsChrome
                     )
                 }
             }

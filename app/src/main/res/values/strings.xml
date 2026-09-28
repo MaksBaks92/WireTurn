@@ -225,6 +225,8 @@
     <string name="webdav_timeout">Timeout</string>
     <string name="webdav_encrypt">Encryption (AES-256-GCM)</string>
     <string name="webdav_encrypt_desc">Must be enabled on the server side as well</string>
+    <string name="webdav_tls_chrome">Chrome TLS fingerprint</string>
+    <string name="webdav_tls_chrome_desc">Turn off if the WebDAV server rejects the connection</string>
     <string name="webdav_dns_label">DNS server</string>
     <string name="webdav_dns_desc">Resolves only the WebDAV backend\'s hostname - tunneled traffic is unaffected. Leave blank to use the OS resolver.</string>
     <string name="webdav_backends_title">Additional backends</string>

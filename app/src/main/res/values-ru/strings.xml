@@ -195,6 +195,8 @@
     <string name="webdav_timeout">Timeout</string>
     <string name="webdav_encrypt">Шифрование (AES-256-GCM)</string>
     <string name="webdav_encrypt_desc">Должно быть включено и на стороне сервера</string>
+    <string name="webdav_tls_chrome">Отпечаток TLS Chrome</string>
+    <string name="webdav_tls_chrome_desc">Выключите, если WebDAV-сервер отклоняет подключение</string>
     <string name="webdav_dns_label">DNS-сервер</string>
     <string name="webdav_dns_desc">Определяет только адрес сервера WebDAV — на туннелируемый трафик не влияет. Оставьте пустым, чтобы использовать системный резолвер.</string>
     <string name="webdav_backends_title">Дополнительные бэкенды</string>

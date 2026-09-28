@@ -64,6 +64,7 @@ object WebdavKernel : Kernel {
                 appendLine("socks-pass: \"${esc(cfg.socksPass)}\"")
             }
             if (o.encrypt) appendLine("enc: true")
+            appendLine("tls-fingerprint: \"${if (o.tlsChrome) "chrome" else "go"}\"")
             appendLine("timeout: \"${esc(o.timeout)}\"")
             // Purely per-profile - unlike olcRTC's dns, this never falls back to the global
             // ConnectionSettingsScreen default (WebDAV's own binary tolerates a blank -dns fine).

@@ -80,7 +80,8 @@ data class WebdavConfig(
     @SerializedName("puts") val puts: String = "8",
     @SerializedName("read_min") val readMin: String = "3",
     @SerializedName("read_max") val readMax: String = "8",
-    @SerializedName("encrypt") val encrypt: Boolean = false
+    @SerializedName("encrypt") val encrypt: Boolean = false,
+    @SerializedName("tls_chrome") val tlsChrome: Boolean = true
 ) {
     fun isValid(): Boolean = webdav.isNotBlank()
     fun fillDefaults(): WebdavConfig = copy(
@@ -133,6 +134,7 @@ data class WebdavConfig(
         builder.appendQueryParameter("read-min", readMin)
         builder.appendQueryParameter("read-max", readMax)
         if (encrypt) builder.appendQueryParameter("enc", "1")
+        if (!tlsChrome) builder.appendQueryParameter("tls-fingerprint", "go")
         if (dns.isNotBlank()) builder.appendQueryParameter("dns", dns)
         for (backend in backends) {
             if (backend.isValid()) builder.appendQueryParameter("backend", backend.toNestedUri())
@@ -182,7 +184,8 @@ data class WebdavConfig(
                     puts = uri.getQueryParameter("puts") ?: current.puts,
                     readMin = uri.getQueryParameter("read-min") ?: current.readMin,
                     readMax = uri.getQueryParameter("read-max") ?: current.readMax,
-                    encrypt = uri.getQueryParameter("enc") == "1"
+                    encrypt = uri.getQueryParameter("enc") == "1",
+                    tlsChrome = uri.getQueryParameter("tls-fingerprint")?.let { it != "go" } ?: current.tlsChrome
                 )
             } catch (_: Exception) {
                 return null
