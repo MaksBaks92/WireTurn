@@ -492,6 +492,7 @@
     <string name="error_room_not_found">Room not found</string>
     <string name="error_turnable_vk_captcha_failed">VK captcha failed</string>
     <string name="error_turnable_vk_flood">VK flood limit</string>
+    <string name="error_turnable_auth_rejected">Server rejected authorization</string>
     <string name="error_freeturn_server_outdated">Update the FreeTurn server</string>
 
     <string name="error_release_info_failed">Could not get release information</string>

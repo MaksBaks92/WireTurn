@@ -139,6 +139,18 @@ object TurnableKernel : Kernel {
             return true
         }
 
+        // The Turnable server turned the client down (e.g. an unknown user UUID) - since 0.6.4 the
+        // relay client stops on its own instead of reconnecting forever (connection.ErrFatal), and
+        // a restart would only be turned down again.
+        if (lower.contains("server rejected authorization")) {
+            if (CoreServiceState.status.value !is CoreStatus.Suppressed) {
+                CoreServiceState.setStatus(CoreStatus.Error(ctx.getString(R.string.error_turnable_auth_rejected)))
+                ctx.updateNotification(ctx.getString(R.string.error_connecting))
+            }
+            state.startupFailed = true
+            return true
+        }
+
         // VK's anti-flood rejects joins while we keep hammering it, and restarting within seconds
         // only extends the block - wait it out, and surface this reason if the watchdog gives up.
         if (lower.contains("participant.check.flood")) {
