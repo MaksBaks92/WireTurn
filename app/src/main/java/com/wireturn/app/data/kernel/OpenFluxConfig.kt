@@ -42,11 +42,10 @@ data class OpenFluxConfig(
     // use the *same* codec - it's not negotiated - so this exists purely for talking to an
     // exit-node that hasn't been updated past that point yet. False keeps the new default.
     @SerializedName("legacy_codec") val legacyCodec: Boolean = false,
-    // The encryption context (--session-context) when it isn't the room list itself: a
-    // cupsonline exit that created its rooms at start has no --url and derives "http://#", while
-    // a client passing those rooms as --url would derive the rooms - different keys. Set from an
-    // openflux://v1/ link's "context" or by hand on the config screen, and only ever used for
-    // cupsonline; blank = the core's own derivation (the --url).
+    // Explicit encryption context (--session-context), the salt the keys are derived from along
+    // with the secret - both peers must use the same one. Blank = the core's own rule, see
+    // [derivedContext]; only needed for an exit started with a context of its own. Set by hand
+    // or from an openflux://v1/ link whose "context" differs from that rule.
     @SerializedName("session_context") val sessionContext: String = ""
 ) {
     val platformDisplayName: String
@@ -83,9 +82,12 @@ data class OpenFluxConfig(
         sessionContext = (sessionContext as Any?)?.toString()?.trim()?.take(2000) ?: ""
     )
 
-    /** The --session-context to pass, if any - see [sessionContext]. */
+    /** The context the core derives on its own for this profile - see [derivedContext]. */
+    val derivedContext: String get() = derivedContext(transport, url)
+
+    /** The --session-context to pass, if any: only when it differs from [derivedContext]. */
     val effectiveSessionContext: String?
-        get() = sessionContext.takeIf { transport == "cupsonline" && it.isNotBlank() && it != url }
+        get() = sessionContext.takeIf { it.isNotBlank() && it != derivedContext }
 
     fun fillDefaults(): OpenFluxConfig = sanitize()
 
@@ -98,11 +100,11 @@ data class OpenFluxConfig(
         val json = JsonObject().apply {
             if (!profileName.isNullOrBlank()) addProperty("name", profileName)
             if (legacyCodec) addProperty("codec", "legacy")
-            if (encryptionKey.isNotBlank()) addProperty("secret", encryptionKey)
-            // The encryption context: a single-transport client uses its --url (main.go's
-            // sessionContext), which is what --share writes too - except a cupsonline exit
-            // without --url (see sessionContext).
-            addProperty("context", effectiveSessionContext ?: url)
+            if (encryptionKey.isNotBlank()) {
+                addProperty("secret", encryptionKey)
+                // As the core's own share.Make does, an encrypted link always names its context.
+                addProperty("context", effectiveSessionContext ?: derivedContext)
+            }
             add("transports", JsonArray().apply {
                 add(JsonObject().apply {
                     addProperty("type", transport)
@@ -132,7 +134,10 @@ data class OpenFluxConfig(
         } else {
             builder.appendQueryParameter("url", url)
         }
-        if (encryptionKey.isNotBlank()) builder.appendQueryParameter("enc", encryptionKey)
+        if (encryptionKey.isNotBlank()) {
+            builder.appendQueryParameter("enc", encryptionKey)
+            effectiveSessionContext?.let { builder.appendQueryParameter("context", it) }
+        }
         if (legacyCodec) builder.appendQueryParameter("codec", "legacy")
         if (!profileName.isNullOrBlank()) builder.appendQueryParameter("name", profileName)
         return builder.build().toString()
@@ -141,9 +146,20 @@ data class OpenFluxConfig(
     companion object {
         const val V1_PREFIX = "openflux://v1/"
 
-        // What a cupsonline exit started without --url derives as its encryption context (the
-        // core's placeholder --url) - see sessionContext.
-        const val CUPS_CREATED_ROOMS_CONTEXT = "http://#"
+        // The core's --url default, and the context of a channel with no document URL.
+        const val CONTEXT_PLACEHOLDER = "http://#"
+
+        /**
+         * The encryption context the core derives for a single-transport client on its own
+         * (external/openflux transport/kdfcontext.go, KDFContexts): the document URL, except
+         * where there's none to name the channel - a cupsonline room list (its exit creates the
+         * rooms, so it can't know it beforehand) and MAX.
+         */
+        fun derivedContext(transport: String, url: String): String = when {
+            transport == "cupsonline" || transport == "oneme" -> CONTEXT_PLACEHOLDER
+            url.isBlank() -> CONTEXT_PLACEHOLDER
+            else -> url
+        }
 
         // share.go's maxPayload: bounds the inflated JSON against a crafted link.
         private const val V1_MAX_PAYLOAD = 16 shl 10
@@ -171,7 +187,13 @@ data class OpenFluxConfig(
             val trimmed = url.trim()
             if (!trimmed.startsWith(V1_PREFIX, ignoreCase = true)) return null
             return try {
-                val packed = Base64.decode(trimmed.substring(V1_PREFIX.length), Base64.URL_SAFE)
+                // As tolerant as the core's share.Read: padding, the standard alphabet,
+                // whitespace and line breaks (links wrapped by messengers) are all accepted.
+                val payload = trimmed.substring(V1_PREFIX.length)
+                    .filterNot(Char::isWhitespace)
+                    .replace('+', '-').replace('/', '_')
+                    .trimEnd('=')
+                val packed = Base64.decode(payload, Base64.URL_SAFE or Base64.NO_PADDING)
                 val out = ByteArrayOutputStream()
                 InflaterInputStream(ByteArrayInputStream(packed), Inflater(true)).use { input ->
                     val buf = ByteArray(1024)
@@ -206,15 +228,15 @@ data class OpenFluxConfig(
                 "legacy" -> true
                 else -> return null
             }
-            // "context" differs from the url only for a cupsonline exit that created its rooms
-            // itself (see sessionContext) - elsewhere --share writes the url there.
+            // Kept only when it differs from what the core derives on its own, so an ordinary
+            // link leaves the field blank and a later change of document isn't pinned to it.
             val context = json.get("context")?.asString.orEmpty()
             return current.copy(
                 transport = type,
                 url = docUrl,
                 encryptionKey = json.get("secret")?.asString.orEmpty(),
                 legacyCodec = legacyCodec,
-                sessionContext = context.takeIf { type == "cupsonline" && it.isNotBlank() && it != docUrl }.orEmpty()
+                sessionContext = context.takeIf { it.isNotBlank() && it != derivedContext(type, docUrl) }.orEmpty()
             )
         }
 
@@ -233,15 +255,16 @@ data class OpenFluxConfig(
                 "batched" -> false
                 else -> current.legacyCodec
             }
+            val sessionContext = uri.getQueryParameter("context").orEmpty()
             return if (transport == "oneme") {
                 val token = uri.getQueryParameter("token") ?: current.maxToken
                 val uid = uri.getQueryParameter("uid") ?: current.maxUid
                 if (token.isBlank() || uid.isBlank()) return null
-                OpenFluxConfig(transport = "oneme", url = current.url, maxToken = token, maxUid = uid, encryptionKey = encryptionKey, legacyCodec = legacyCodec)
+                OpenFluxConfig(transport = "oneme", url = current.url, maxToken = token, maxUid = uid, encryptionKey = encryptionKey, legacyCodec = legacyCodec, sessionContext = sessionContext)
             } else {
                 val docUrl = uri.getQueryParameter("url") ?: current.url
                 if (docUrl.isBlank()) return null
-                OpenFluxConfig(transport = transport, url = docUrl, maxToken = current.maxToken, maxUid = current.maxUid, encryptionKey = encryptionKey, legacyCodec = legacyCodec)
+                OpenFluxConfig(transport = transport, url = docUrl, maxToken = current.maxToken, maxUid = current.maxUid, encryptionKey = encryptionKey, legacyCodec = legacyCodec, sessionContext = sessionContext)
             }
         }
 

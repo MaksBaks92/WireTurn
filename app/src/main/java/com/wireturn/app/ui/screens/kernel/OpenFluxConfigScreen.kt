@@ -461,10 +461,10 @@ fun OpenFluxConfigScreen(
                 }
             }
 
-            // Optional, transport-agnostic - works on top of yandex/vyandex/oneme alike.
-            // The context only ever differs from the url for cupsonline (see
-            // OpenFluxConfig.sessionContext), and only matters with a key.
-            val showSessionContext = config.transport == "cupsonline" && config.encryptionKey.isNotBlank()
+            // Optional, transport-agnostic - works on top of yandex/vyandex/oneme alike. The
+            // context only matters with a key; blank means the core's own rule, shown as the
+            // placeholder (OpenFluxConfig.derivedContext).
+            val showSessionContext = config.encryptionKey.isNotBlank()
             SectionGroup(title = stringResource(R.string.openflux_encryption_settings_title)) {
                 SectionItem(position = if (showSessionContext) ItemPosition.Top else ItemPosition.Single) {
                     TextFieldRow(
@@ -489,7 +489,7 @@ fun OpenFluxConfigScreen(
                             readOnly = isPrivacyActive,
                             isModified = isEditMode && config.sessionContext != initialConfig.sessionContext,
                             privacyMode = isPrivacyActive,
-                            placeholder = OpenFluxConfig.CUPS_CREATED_ROOMS_CONTEXT,
+                            placeholder = config.derivedContext.redact(isPrivacyActive),
                             supportingText = stringResource(R.string.openflux_session_context_desc)
                         )
                     }
