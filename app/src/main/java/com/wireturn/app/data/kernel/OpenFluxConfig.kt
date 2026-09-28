@@ -41,7 +41,13 @@ data class OpenFluxConfig(
     // default `batched` (zstd + coalescing, added alongside mailru upstream). The two ends must
     // use the *same* codec - it's not negotiated - so this exists purely for talking to an
     // exit-node that hasn't been updated past that point yet. False keeps the new default.
-    @SerializedName("legacy_codec") val legacyCodec: Boolean = false
+    @SerializedName("legacy_codec") val legacyCodec: Boolean = false,
+    // The encryption context (--session-context) when it isn't the room list itself: a
+    // cupsonline exit that created its rooms at start has no --url and derives "http://#", while
+    // a client passing those rooms as --url would derive the rooms - different keys. Only set
+    // from an openflux://v1/ link's "context", and only ever used for cupsonline; blank = the
+    // core's own derivation (the --url).
+    @SerializedName("session_context") val sessionContext: String = ""
 ) {
     val platformDisplayName: String
         get() = when (transport) {
@@ -73,8 +79,13 @@ data class OpenFluxConfig(
         url = (url as Any?)?.toString()?.trim()?.take(2000) ?: "",
         maxToken = (maxToken as Any?)?.toString()?.trim()?.take(4096) ?: "",
         maxUid = (maxUid as Any?)?.toString()?.trim()?.filter(Char::isDigit)?.take(32) ?: "",
-        encryptionKey = (encryptionKey as Any?)?.toString()?.trim()?.take(4096) ?: ""
+        encryptionKey = (encryptionKey as Any?)?.toString()?.trim()?.take(4096) ?: "",
+        sessionContext = (sessionContext as Any?)?.toString()?.trim()?.take(2000) ?: ""
     )
+
+    /** The --session-context to pass, if any - see [sessionContext]. */
+    val effectiveSessionContext: String?
+        get() = sessionContext.takeIf { transport == "cupsonline" && it.isNotBlank() && it != url }
 
     fun fillDefaults(): OpenFluxConfig = sanitize()
 
@@ -89,8 +100,9 @@ data class OpenFluxConfig(
             if (legacyCodec) addProperty("codec", "legacy")
             if (encryptionKey.isNotBlank()) addProperty("secret", encryptionKey)
             // The encryption context: a single-transport client uses its --url (main.go's
-            // sessionContext), which is exactly what --share writes too.
-            addProperty("context", url)
+            // sessionContext), which is what --share writes too - except a cupsonline exit
+            // without --url (see sessionContext).
+            addProperty("context", effectiveSessionContext ?: url)
             add("transports", JsonArray().apply {
                 add(JsonObject().apply {
                     addProperty("type", transport)
@@ -190,11 +202,15 @@ data class OpenFluxConfig(
                 "legacy" -> true
                 else -> return null
             }
+            // "context" differs from the url only for a cupsonline exit that created its rooms
+            // itself (see sessionContext) - elsewhere --share writes the url there.
+            val context = json.get("context")?.asString.orEmpty()
             return current.copy(
                 transport = type,
                 url = docUrl,
                 encryptionKey = json.get("secret")?.asString.orEmpty(),
-                legacyCodec = legacyCodec
+                legacyCodec = legacyCodec,
+                sessionContext = context.takeIf { type == "cupsonline" && it.isNotBlank() && it != docUrl }.orEmpty()
             )
         }
 

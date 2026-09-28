@@ -25,7 +25,7 @@ object OpenFluxKernel : Kernel {
     override val variant: KernelVariant = KernelVariant.OPENFLUX
     // --url carries the Yandex.Docs document link, which is effectively the shared secret/
     // rendezvous point for that transport - as sensitive as FreeTurn's -links/-sub.
-    override val sensitiveCommandFlags: Set<String> = setOf("--maxToken", "--url")
+    override val sensitiveCommandFlags: Set<String> = setOf("--maxToken", "--url", "--session-context")
     override val displayNameRes: Int = R.string.kernel_openflux
     override val configActivityClass = OpenFluxConfigActivity::class.java
     override val wgNotUsedMessageRes: Int = R.string.wg_not_used_with_openflux
@@ -233,6 +233,9 @@ object OpenFluxKernel : Kernel {
             val keyFile = File(ctx.filesDir, "openflux_key.txt")
             keyFile.writeText(o.encryptionKey)
             cmdArgs.addAll(listOf("--encryption-key-file", keyFile.absolutePath))
+            // Keys derive from the secret plus this context, so it must be the exit's own - see
+            // OpenFluxConfig.sessionContext.
+            o.effectiveSessionContext?.let { cmdArgs.addAll(listOf("--session-context", it)) }
         }
         return cmdArgs
     }
@@ -405,9 +408,12 @@ object OpenFluxKernel : Kernel {
         // above via main.go's own "failed to start transport" fatal line - no heuristic needed
         // for that part, unlike classic Yandex. Once running, though, its WS listener reconnects
         // forever on its own with backoff, same silent-spin risk as classic Yandex's read-error
-        // loop above.
+        // loop above. Since 0.1.0 every drop logs "[VOLGA] WS disconnected: <error type>" (was
+        // "WS error: <error>"), including its own session rotation every 30 min and the forced
+        // reconnect after a minute of unanswered traffic - one line each, far below the
+        // counter's threshold, so only a real reconnect loop trips it.
         if (transport == "vyandex" && (
-                lower.contains("[volga] ws error") ||
+                lower.contains("[volga] ws disconnected") ||
                 lower.contains("[volga] batch send failed")
             )
         ) {
