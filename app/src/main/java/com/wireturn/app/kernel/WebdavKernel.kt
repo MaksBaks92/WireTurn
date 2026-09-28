@@ -92,12 +92,14 @@ object WebdavKernel : Kernel {
         }
     }
 
-    // Per-connection lifecycle (tunnel/mux.go) and the 10-second per-pipe latency report
-    // (tunnel/pipe.go). A failed dial is logged separately and stays visible.
+    // Per-connection lifecycle (tunnel/mux.go) - UDP associations included since 0.3.0, one
+    // opened/closed pair each - and the 10-second per-pipe latency report (tunnel/pipe.go). A
+    // failed dial is logged separately and stays visible.
     override fun isNoise(line: String): Boolean =
         WEBDAV_CONN_LINE.containsMatchIn(line) || line.contains(" latency: avg=")
 
-    private val WEBDAV_CONN_LINE = Regex("""\[s\d+] (?:SOCKS5 connect |closed$|connecting to )""")
+    private val WEBDAV_CONN_LINE =
+        Regex("""\[s\d+] (?:SOCKS5 connect |closed$|connecting to |UDP relay (?:opened|closed))""")
 
     override suspend fun parseLogLine(line: String, lower: String, state: BinaryOutputState, ctx: KernelLogContext, cfg: ClientConfig): Boolean {
         // pingBackends() logs one "connection failed" per dead backend before the final "all N
