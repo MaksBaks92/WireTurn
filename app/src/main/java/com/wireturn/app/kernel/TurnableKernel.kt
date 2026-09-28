@@ -84,9 +84,11 @@ object TurnableKernel : Kernel {
             line.contains("scope=turnc")
 
     // Turnable (0.6.3+) rides out an outage for up to its SessionGrace (3 min) before starting
-    // over with fresh VK credentials - a new VK auth risks its flood limit and a captcha, so give it
-    // that long plus some margin before CoreService's watchdog restarts the whole process.
-    override val connectingTimeoutMs: Long = 210_000L
+    // over with fresh VK credentials, and since 0.6.4 backs off up to ReconnectBackoffMax (5 min)
+    // between attempts after VK platform errors - a new VK auth risks its flood limit and a
+    // captcha, so let that longest wait play out, plus some margin, before CoreService's watchdog
+    // restarts the whole process.
+    override val connectingTimeoutMs: Long = 360_000L
 
     // Lines parseLogLine already checks for but Turnable logs at DEBUG: the tinymux session dying
     // (always followed by Turnable's own "tinymux session died" full reconnect, so a fresh
