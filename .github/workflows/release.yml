@@ -24,6 +24,10 @@ jobs:
         with:
           go-version: 'stable'
           cache-dependency-path: "**/*.sum"
+          # A tag run can't restore unstable's cache (only its own ref and the default branch),
+          # and saving a fresh ~2 GB one for a tag that never builds again only slows the release
+          # down and eats the repo's cache quota.
+          cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
       - name: Set up JDK 21
         uses: actions/setup-java@v5
