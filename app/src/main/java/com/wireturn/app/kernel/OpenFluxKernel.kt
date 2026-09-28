@@ -221,9 +221,11 @@ object OpenFluxKernel : Kernel {
         }
         // Needed for real log visibility: main.go's own client/transport lines (banner, "Running
         // as CLIENT", fatal errors) print unconditionally either way, but everything from the
-        // Yandex.Docs handshake/reconnect loop (utils.Debugf in transport/yandex) is a no-op
-        // without this - see parseLogLine below, which depends on it to detect a dead session.
-        cmdArgs.add("--debug")
+        // transports' handshake/reconnect loops (utils.Debugf) is a no-op below level 2 - see
+        // parseLogLine below, which depends on it to detect a dead session. The level is explicit:
+        // since 0.1.0 --debug is a level, a bare one means 1 (a line per packet, no Debugf), and 3
+        // adds hexdumps.
+        cmdArgs.add("--debug=2")
         // Optional end-to-end encryption on top of the transport (--encryption-key-file, added
         // upstream alongside vyandex) - the flag takes a file path, not the secret itself, so it
         // gets written out fresh on every start rather than passed inline like -maxToken/-url.
@@ -298,8 +300,9 @@ object OpenFluxKernel : Kernel {
             return failFast(line, state, ctx)
         }
 
-        // 2. Connecting - first banner line, printed before the transport handshake starts.
-        if (lower.contains("=== universal bypass tool ===")) {
+        // 2. Connecting - first banner line, printed before the transport handshake starts
+        // ("=== Universal Bypass Tool ===" before 0.1.0).
+        if (lower.contains("=== openflux ===")) {
             if (canUpdateConnectingStatus()) {
                 markConnecting()
             }
