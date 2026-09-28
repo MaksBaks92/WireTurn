@@ -330,11 +330,26 @@ openflux://config?transport=oneme&token=abc123&uid=123456789&name=MAX-1
 
 | Поле | Тип | Описание |
 | :--- | :--- | :--- |
-| `vlessLink` | String | Ссылка `vless://...`, `trojan://...`, `hysteria2://...` или `hy2://...`. При использовании поверх Turnable/FreeTurn адрес и порт в ссылке игнорируются — подставляется локальный адрес ядра. |
-| `isDualRoute` | Boolean | Dual Route: приложение по возможности использует прямое подключение к `directAddress`, а если оно недоступно (health-check не проходит) — прозрачно переключается на туннель через ядро. |
-| `directAddress` | String | Адрес прямого подключения в Dual Route (`host:port`). |
-| `hcInterval` | String | Интервал health-check, сек. По умолчанию `"30"`. |
+| `vlessLink` | String | Ссылка `vless://...`, `trojan://...`, `hysteria2://...` или `hy2://...`. Как она используется, зависит от ядра и режима — см. таблицу ниже. |
+| `isDualRoute` | Boolean | Dual Route: два маршрута с балансировкой по health-check — прямое подключение к `directAddress` (предпочтительное) и запасной маршрут через ядро; если прямое недоступно, трафик прозрачно уходит через ядро. |
+| `directAddress` | String | Адрес сервера Xray для прямого маршрута в Dual Route (`host:port`); без него Dual Route не включается. |
+| `hcInterval` | String | Интервал health-check Dual Route, сек. По умолчанию `"30"`. |
+| `hcDestination` | String | URL, по которому health-check Dual Route проверяет маршруты. Пусто — `http://connectivitycheck.gstatic.com/generate_204`. |
 | `mux` | String | Число потоков Mux, `"0"` — выключено. |
+| `isSocks5Chain` | Boolean | Только для SOCKS5-ядер: подключение по ссылке идёт **через** SOCKS5 ядра (ядро — транспорт до сервера Xray), а не вместо него. См. таблицу ниже. |
+
+**Режимы маршрута.** Что делает Xray, в зависимости от ядра и флагов:
+
+| Ядро | Флаги | Маршрут |
+| :--- | :--- | :--- |
+| Turnable, FreeTurn | — | Подключение по ссылке, но адрес и порт в ней заменяются локальным адресом ядра: трафик идёт к серверу Xray через туннель ядра. |
+| Turnable, FreeTurn | `isDualRoute` | Прямо к серверу Xray на `directAddress`; при недоступности — через ядро, как выше. |
+| SOCKS5-ядра (olcRTC, WebDAV, qWDTT, OpenFlux) | — | Ссылка **не используется** (может быть пустой): Xray просто передаёт трафик в SOCKS5 ядра, выход в интернет — на стороне сервера ядра. |
+| SOCKS5-ядра | `isSocks5Chain` | Подключение по ссылке, проложенное через SOCKS5 ядра: выход в интернет — на сервере Xray, ядро служит только транспортом до него. |
+| SOCKS5-ядра | `isDualRoute` | Прямо к серверу Xray на `directAddress`; при недоступности — в SOCKS5 ядра **без** Xray (выход на стороне сервера ядра). |
+| SOCKS5-ядра | `isDualRoute` + `isSocks5Chain` | Оба маршрута ведут к одному серверу Xray: прямо на `directAddress`, а при недоступности — по той же ссылке через SOCKS5 ядра. |
+
+Для SOCKS5-ядер ссылка обязательна только при `isDualRoute` или `isSocks5Chain`; без них профиль валиден и с пустой ссылкой.
 
 ### `wgConfig`
 
