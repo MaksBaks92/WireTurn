@@ -538,6 +538,9 @@ class CoreService : Service() {
                         val kernel = KernelRegistry.get(cfg.kernelVariant)
                         for (rawLine in reader.lineSequence()) {
                             if (!isActive) break
+                            // Per-packet trace lines: thousands a second under load, so they go
+                            // before any other work (ANSI stripping, level detection, parsing).
+                            if (kernel.isDiscarded(rawLine)) continue
                             val line = AppLogsState.stripAnsi(rawLine)
                             val level = kernel.logLevel(line) ?: LogLevels.detect(line)
                             AppLogsState.addLog(line, if (kernel.isNoise(line)) LogLevel.DEBUG else level)

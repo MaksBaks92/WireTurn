@@ -159,6 +159,13 @@ interface Kernel {
     fun isNoise(line: String): Boolean = false
 
     /**
+     * Per-packet trace lines a kernel can't be told to leave out without losing the debug output
+     * [parseLogLine] relies on: dropped before anything else - never logged, never parsed. Called
+     * on every raw line, so it must stay a few cheap string checks.
+     */
+    fun isDiscarded(line: String): Boolean = false
+
+    /**
      * How long the status may sit in Connecting before CoreService's watchdog restarts the binary.
      * Longer for a kernel that deliberately waits out outages on its own (see TurnableKernel).
      */

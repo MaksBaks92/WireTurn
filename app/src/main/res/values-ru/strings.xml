@@ -467,6 +467,7 @@
     <string name="error_openflux_yandex_login">Документ требует входа в Яндекс</string>
     <string name="error_openflux_cups_rooms_gone">Комнаты Cups закрыты, пересоздайте их на ноде</string>
     <string name="error_openflux_cups_rooms_unreachable">Комнаты Cups не отвечают</string>
+    <string name="error_openflux_key_mismatch">Ключ шифрования не совпадает с нодой</string>
     <string name="error_openflux_dns_lookup_failed">Хост не найден: %1$s</string>
 
     <!-- Уведомления -->

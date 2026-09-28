@@ -55,6 +55,23 @@ object OpenFluxKernel : Kernel {
     override fun isNoise(line: String): Boolean =
         ROUTINE_RECYCLE.containsMatchIn(line) || ROUTINE_RECONNECT.containsMatchIn(line)
 
+    // Since 0.1.0 level 2 (--debug=2, which parseLogLine needs) also carries level 1's packet
+    // lines and several per-packet traces of its own - thousands a second under load, several per
+    // packet with a key. None of them is a status signal; the summaries that are (key mismatch,
+    // handshake diagnosis, codec/context fallback) are separate Infof lines.
+    override fun isDiscarded(line: String): Boolean {
+        val tag = line.indexOf('[')
+        if (tag < 0 || tag > 40) return false
+        return PER_PACKET_TRACES.any { line.startsWith(it, tag) }
+    }
+
+    private val PER_PACKET_TRACES = listOf(
+        "[TUNNEL] -> ", "[TUNNEL] <- ",
+        "[BATCH] Send: enqueued", "[BATCH] Recv: ", "[BATCH] flushLoop: ",
+        "[CRYPTO] Send #", "[CRYPTO] Recv #", "[CRYPTO] Recv raw ", "[CRYPTO] Recv DECRYPT FAIL", "[CRYPTO] Recv DROP",
+        "[SESSION] send IPv4 #", "[SESSION] recv IPv4 #", "[SESSION] recv from "
+    )
+
     private val ROUTINE_RECYCLE =
         Regex("""\[(?:YDOCS] Read error|M-DOCS] Read error|BOARDS] ws error): (?:read: )?websocket: close 1005""")
     private val ROUTINE_RECONNECT = Regex("""\[(?:YDOCS|M-DOCS)] reconnecting in \S+ \(attempt 0\)""")
@@ -83,6 +100,9 @@ object OpenFluxKernel : Kernel {
     // Doesn't cover 0d (DNS failure - needs isNetworkMissingAndHandled() first and a dynamic host
     // in the message) or point 1 (generic panics - message is the raw line, not a resource lookup).
     private class FastFailRule(val transports: Set<String>, val messageRes: Int, val matcher: (String) -> Boolean)
+
+    // Declared before FAST_FAIL_RULES: object properties initialize in declaration order.
+    private val ALL_TRANSPORTS = setOf("yandex", "vyandex", "boards", "mailru", "cupsonline", "oneme")
 
     private val FAST_FAIL_RULES = listOf(
         // 0a. Volga auth failure (transport/yandex/vyandex.go): "action_url missing" means the
@@ -141,6 +161,12 @@ object OpenFluxKernel : Kernel {
         // node helps. Rooms that merely didn't answer are point 6's retry instead.
         FastFailRule(setOf("cupsonline"), R.string.error_openflux_cups_rooms_gone) {
             "all rooms are gone" in it
+        },
+        // 0i. Since 0.2.0 a keyed profile tries its alternate KDF contexts before giving up, and
+        // then says so in one line ("... failed authentication under all N KDF contexts tried ...:
+        // the encryption key differs from the peer's") - no retry makes the keys agree.
+        FastFailRule(ALL_TRANSPORTS, R.string.error_openflux_key_mismatch) {
+            "the encryption key differs from the peer's" in it
         }
     )
 
@@ -294,6 +320,23 @@ object OpenFluxKernel : Kernel {
             ctx.setLastFailureReason(ctx.getString(R.string.error_openflux_cups_rooms_unreachable))
             state.startupEmitted = true
             return true
+        }
+
+        // 6b. Since 0.2.0 a keyed profile runs as a Session, and a transport that fails to start
+        // is no fatal "Failed to start transport" but '[SESSION] carrier "X" failed to start:
+        // <error>; retrying in the background' - the core keeps trying on its own. The FAST_FAIL
+        // rules above still catch the deterministic errors by their text; anything else only
+        // means "not up yet", with the watchdog's connecting timeout as the backstop.
+        if (lower.contains("[session] carrier") && lower.contains("failed to start")) {
+            if (ctx.isNetworkMissingAndHandled()) {
+                state.startupFailed = true
+                return true
+            }
+            if (transport == "cupsonline" && lower.contains("no rooms joined")) {
+                ctx.setLastFailureReason(ctx.getString(R.string.error_openflux_cups_rooms_unreachable))
+            }
+            if (canUpdateConnectingStatus()) markConnecting()
+            state.startupEmitted = true
         }
 
         // 1. Hard errors (log.Fatalf in main.go - prints then exits)
