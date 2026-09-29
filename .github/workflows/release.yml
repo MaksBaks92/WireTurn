@@ -30,11 +30,16 @@ jobs:
           cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
       - name: Set up Rust
+        env:
+          CARGO_NDK_VERSION: v4.1.2
         run: |
           rustup update stable --no-self-update
           rustup default stable
           rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
-          cargo install cargo-ndk --locked
+          # The prebuilt release binaries instead of `cargo install` (a 1-2 min compile every run).
+          curl -sSfL "https://github.com/bbqsrc/cargo-ndk/releases/download/${CARGO_NDK_VERSION}/cargo-ndk-x86_64-unknown-linux-gnu-${CARGO_NDK_VERSION}.tgz" \
+            | tar -xz --strip-components=1 -C "$HOME/.cargo/bin"
+          cargo ndk --version
 
       - name: Cache Rust build
         # Same reasoning as setup-go's cache above for tags.

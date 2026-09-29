@@ -160,8 +160,8 @@ build_go_project() {
     done
 }
 
-# Rust binaries via cargo-ndk. No 32-bit x86 - CSQTT upstream builds and ships only these three
-# (its crypto deps are only exercised there). On x86 devices the app doesn't offer CSQTT for new
+# Rust binaries via cargo-ndk. No 32-bit x86 - the same three ABIs CSQTT upstream builds and ships
+# (its app's abiFilters); an i686 build was never tried. On x86 devices the app doesn't offer CSQTT for new
 # profiles, and an imported one fails to start with an "unavailable for this architecture" error.
 RUST_ABIS="arm64-v8a armeabi-v7a x86_64"
 declare -A RUST_TRIPLE=(
