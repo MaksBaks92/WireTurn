@@ -77,6 +77,14 @@ object CoreServiceState {
     private val _restartAttempt = MutableStateFlow<RestartAttempt?>(null)
     val restartAttempt: StateFlow<RestartAttempt?> = _restartAttempt.asStateFlow()
 
+    // Kernel TUN mode (usesNativeTun) has no hev to read traffic counters from - they come from
+    // the kernel's own periodic stats line instead. Null outside that mode; `at` (elapsedRealtime
+    // of the sample) is 0 until the first one arrives.
+    data class NativeTunTraffic(val rxBytes: Long, val txBytes: Long, val at: Long)
+
+    private val _nativeTunTraffic = MutableStateFlow<NativeTunTraffic?>(null)
+    val nativeTunTraffic: StateFlow<NativeTunTraffic?> = _nativeTunTraffic.asStateFlow()
+
     val isRunning: StateFlow<Boolean> = _status.map { it !is CoreStatus.Idle }
         .stateIn(scope, kotlinx.coroutines.flow.SharingStarted.Eagerly, false)
 
@@ -92,6 +100,7 @@ object CoreServiceState {
             _session.value = null
             _statusText.value = null
             _captchaSession.value = null
+            _nativeTunTraffic.value = null
         }
         if (newStatus is CoreStatus.CaptchaRequired) {
             _captchaSession.value = newStatus.session
@@ -101,6 +110,10 @@ object CoreServiceState {
 
     fun setRestartAttempt(attempt: RestartAttempt?) {
         _restartAttempt.value = attempt
+    }
+
+    fun setNativeTunTraffic(traffic: NativeTunTraffic?) {
+        _nativeTunTraffic.value = traffic
     }
 
     fun setStatusText(text: String?) {

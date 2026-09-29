@@ -131,6 +131,12 @@ class CoreService : Service() {
                 })
             }
         }
+        override fun onNativeTunTraffic(rxBytes: Long, txBytes: Long) {
+            if (nativeTunSocket == null) return
+            CoreServiceState.setNativeTunTraffic(
+                CoreServiceState.NativeTunTraffic(rxBytes, txBytes, android.os.SystemClock.elapsedRealtime())
+            )
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -439,6 +445,11 @@ class CoreService : Service() {
             nativeTunSocket = if (usesNativeTun(cfg, prefs.vpnSettingsFlow.first().enabled, prefs.xrayConfigFlow.first().enabled)) {
                 "wireturn_tun_${android.os.Process.myPid()}_${System.nanoTime()}"
             } else null
+            // The kernel's counters start over with the process; a placeholder until its first
+            // sample still marks this run as the one the traffic stats come from.
+            CoreServiceState.setNativeTunTraffic(
+                if (nativeTunSocket != null) CoreServiceState.NativeTunTraffic(0, 0, 0L) else null
+            )
             val startupSuccessful = runBinary(cfg)
             val duration = System.currentTimeMillis() - startTime
             
@@ -1248,6 +1259,7 @@ class CoreService : Service() {
             stopBinaryProcessGracefully()
             coreJob?.cancelAndJoin()
             nativeTunSocket = null
+            CoreServiceState.setNativeTunTraffic(null)
 
             if (disableAutoLaunch) {
                 val prefs = AppPreferences(applicationContext)

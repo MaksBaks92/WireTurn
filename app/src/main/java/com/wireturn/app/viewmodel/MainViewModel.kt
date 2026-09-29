@@ -188,6 +188,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _proxyTransfer = MutableStateFlow<TransferResult?>(null)
     val proxyTransfer: StateFlow<TransferResult?> = _proxyTransfer.asStateFlow()
 
+    // Kernel TUN mode: no local SOCKS5 to measure ping through (see activeLocalSocksProxy).
+    val isNativeTun: StateFlow<Boolean> = CoreServiceState.nativeTunTraffic
+        .map { it != null }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     private val _isHomeScreenActive = MutableStateFlow(false)
 
     private var pingJob: Job? = null
@@ -210,6 +215,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var lastRx = 0L
     private var lastTx = 0L
     private var lastMetricsTime = 0L
+    private var lastNativeSampleAt = 0L
 
     // Used to read hev-socks5-tunnel's own traffic counters when VPN mode is active without Xray -
     // native state is process-global, so any instance works regardless of which service created it.
@@ -325,12 +331,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             while (true) {
                 if (_isHomeScreenActive.value) {
                     val xrayState = XrayServiceState.state.value
+                    val nativeTunTraffic = CoreServiceState.nativeTunTraffic.value
                     when {
                         // Same "Xray in the picture" test as activeLocalSocksProxy()/startVpnSupervisor() -
                         // Xray keeps priority from Starting onward, not just once fully Running, so the
                         // stats don't briefly attribute to VPN's own counters while Xray is still coming up.
                         xrayState != XrayState.Idle ->
                             XrayServiceState.statsSocketName.value?.let { updateXrayMetrics(it) }
+                        // Kernel TUN mode: no hev in the path, the kernel's own counters instead.
+                        nativeTunTraffic != null -> updateNativeTunMetrics(nativeTunTraffic)
                         VpnServiceState.state.value == VpnState.Running -> updateHevMetrics()
                         else -> _proxyTransfer.value = null
                     }
@@ -347,6 +356,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         lastRx = 0L
         lastTx = 0L
         lastMetricsTime = 0L
+        lastNativeSampleAt = 0L
     }
 
     /** rx/tx are cumulative byte counters; this turns a new sample into a TransferResult with speed. */
@@ -391,7 +401,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: Exception) {}
     }
 
-    override fun onCleared() { 
+    // The kernel logs a sample every ~3s - each is applied once, or the 1s polls in between would
+    // read as zero speed. Until the first one, the last shown values just stay.
+    private fun updateNativeTunMetrics(sample: CoreServiceState.NativeTunTraffic) {
+        if (sample.at == 0L || sample.at == lastNativeSampleAt) return
+        lastNativeSampleAt = sample.at
+        applyTransferSample(rx = sample.rxBytes, tx = sample.txBytes)
+    }
+
+    override fun onCleared() {
         coreManager.destroy()
     }
 

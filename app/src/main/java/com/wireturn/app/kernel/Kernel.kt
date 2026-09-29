@@ -52,6 +52,9 @@ interface KernelLogContext {
     // Kernel TUN mode (Kernel.supportsNativeTun): the address/DNS/MTU the kernel was assigned,
     // for the VPN to be built with before it's handed the TUN. A no-op default for other kernels.
     fun onNativeTunConfig(address: String, dns: List<String>, mtu: Int) {}
+    // Kernel TUN mode: cumulative bytes through that TUN (rx = down, tx = up) since the process
+    // started, in place of hev's counters. Ignored outside that mode.
+    fun onNativeTunTraffic(rxBytes: Long, txBytes: Long) {}
 }
 
 /** Per-run mutable state threaded through repeated [Kernel.parseLogLine] calls for one binary run. */

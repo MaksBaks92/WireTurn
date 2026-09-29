@@ -141,6 +141,9 @@ fun activeLocalSocksProxy(): java.net.Proxy {
                     s.proxyPass
                 )
             }
+            // Kernel TUN mode: the kernel runs no SOCKS5 at all, and the app is excluded from its
+            // tun (the kernel shares its UID) - there's no tunnel path for the app's own requests.
+            com.wireturn.app.CoreServiceState.nativeTunTraffic.value != null -> null
             coreIsWorking && coreSess != null && coreSess.clientConfig.kernelVariant.isSocks5Native -> {
                 val cc = coreSess.clientConfig
                 ActiveSocksTarget(

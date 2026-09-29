@@ -210,6 +210,14 @@ object QwdttKernel : Kernel {
             return false
         }
 
+        // The periodic stats line's totals, every 3s - in rawtun the bytes through the TUN itself,
+        // which is what hev would otherwise have counted for the VPN.
+        QWDTT_TRAFFIC_REGEX.find(line)?.let { m ->
+            val down = m.groupValues[1].toDoubleOrNull()
+            val up = m.groupValues[2].toDoubleOrNull()
+            if (down != null && up != null) ctx.onNativeTunTraffic(mbToBytes(down), mbToBytes(up))
+        }
+
         // 3. Connected - "[SOCKS] listening" is the definitive signal; the periodic stats line's
         // "Активных: N" (N>0) is a fallback in case that line scrolled past unseen.
         val activeMatch = QWDTT_ACTIVE_REGEX.matcher(line)
@@ -246,6 +254,11 @@ object QwdttKernel : Kernel {
     // go_client's periodic "[СТАТИСТИКА] Активных: N | ..." line - a fallback Connected signal
     // for when "[SOCKS] listening" was missed (e.g. log ring buffer already rotated past it).
     private val QWDTT_ACTIVE_REGEX = Pattern.compile("""Активных:\s*(\d+)""")
+
+    // "... | ↓12.34 МБ / ↑1.23 МБ" - go_client's stats.go, %.2f of MiB.
+    private val QWDTT_TRAFFIC_REGEX = Regex("""↓([\d.]+) МБ / ↑([\d.]+) МБ""")
+
+    private fun mbToBytes(mb: Double): Long = (mb * 1024 * 1024).toLong()
 
     // One field line of the "RAW Конфиг" box: "║ IP = 10.66.0.2      ║".
     private val RAW_CONFIG_FIELD = Regex("""\b(IP|DNS|MTU) = (\S+)""")

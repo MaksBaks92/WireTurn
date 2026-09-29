@@ -220,19 +220,20 @@ fun HomeScreen(
     }
 
     val proxyPing by viewModel.proxyPing.collectAsStateWithLifecycle()
+    val isNativeTun by viewModel.isNativeTun.collectAsStateWithLifecycle()
     var lastSuccessPing by remember { mutableStateOf<MainViewModel.PingResult.Success?>(null) }
     var isControlPingScheduled by rememberSaveable { mutableStateOf(value = false) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
 
     // --- Effects & Lifecycle ---
-    LaunchedEffect(proxyPing, proxyState) {
+    LaunchedEffect(proxyPing, proxyState, isNativeTun) {
         if (proxyPing is MainViewModel.PingResult.Success) {
             lastSuccessPing = proxyPing as MainViewModel.PingResult.Success
         }
 
-        val isProxyActive =
-            proxyState is CoreState.Connected || proxyState is CoreState.Suppressed
+        val isProxyActive = !isNativeTun &&
+            (proxyState is CoreState.Connected || proxyState is CoreState.Suppressed)
         if (isProxyActive) {
             if (proxyPing is MainViewModel.PingResult.Success || proxyPing is MainViewModel.PingResult.Error) {
                 if (!isControlPingScheduled) {
@@ -736,8 +737,8 @@ fun HomeScreen(
                             }
                         }
 
-                        // Ping Block
-                        CompactItem(
+                        // Ping Block - measured through the local SOCKS5, which kernel TUN mode has none of
+                        if (!isNativeTun) CompactItem(
                             modifier = Modifier.fillMaxHeight(),
                             onClick = {
                                 HapticUtil.perform(context, HapticUtil.Pattern.CLICK)
