@@ -39,6 +39,7 @@
     <string name="freeturn_core">Ядро туннеля (FreeTurn)</string>
     <string name="qwdtt_core">Ядро туннеля (qWDTT)</string>
     <string name="openflux_core">Ядро туннеля (OpenFlux)</string>
+    <string name="csqtt_core">Ядро туннеля (CSQTT)</string>
     <!-- Кнопки и общие действия -->
     <string name="btn_open">Открыть</string>
     <string name="btn_close">Закрыть</string>
@@ -470,6 +471,7 @@
 
     <string name="error_release_info_failed">Не удалось получить информацию о релизе</string>
     <string name="error_process_no_output">Процесс завершился без вывода (код: %1$d)</string>
+    <string name="error_csqtt_device_mismatch">Пароль привязан к другому устройству. Отвяжите его в веб-панели сервера CSQTT или используйте отдельный пароль</string>
     <string name="error_kernel_unsupported_device">Это ядро недоступно для архитектуры этого устройства</string>
     <string name="error_critical_format">* КРИТИЧЕСКАЯ ОШИБКА: %1$s</string>
     <string name="error_connecting">Ошибка подключения</string>

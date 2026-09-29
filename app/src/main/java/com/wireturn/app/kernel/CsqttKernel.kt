@@ -136,7 +136,7 @@ object CsqttKernel : Kernel {
         // 2. Hard errors - a wrong password, an expired one, one bound to another device, a
         // server on another protocol version: a restart won't change any of these.
         if (line.contains("FATAL_AUTH") || line.contains("FATAL_PROTOCOL")) {
-            val reason = line.substringAfter("FATAL_AUTH:", line.substringAfter("FATAL_PROTOCOL:", line)).trim()
+            val reason = readableFailure(ctx, line)
             ctx.setLastFailureReason(reason)
             if (CoreServiceState.status.value !is CoreStatus.Suppressed) {
                 CoreServiceState.setStatus(CoreStatus.Error(reason))
@@ -200,8 +200,8 @@ object CsqttKernel : Kernel {
             // one goes to the watchdog, with the message kept for when it gives up.
             "ERROR" -> {
                 if (payload?.get("fatal")?.asBoolean != true) return false
-                val message = payload.get("message")?.asString.orEmpty()
-                ctx.setLastFailureReason(message.substringAfter("FATAL_HANDSHAKE:").trim())
+                val message = readableFailure(ctx, payload.get("message")?.asString.orEmpty())
+                ctx.setLastFailureReason(message)
                 state.startupEmitted = true
                 if (payload.get("code")?.asString == "handshake_rejected") {
                     if (CoreServiceState.status.value !is CoreStatus.Suppressed) {
@@ -215,6 +215,16 @@ object CsqttKernel : Kernel {
         }
         return false
     }
+
+    // The client's own Russian text after its "FATAL_AUTH:"-style tag (rust-client/protocol.rs) -
+    // except a password bound to another device, which gets what to do about it: this app's
+    // ANDROID_ID differs from the official app's, even on the same phone.
+    private fun readableFailure(ctx: KernelLogContext, text: String): String {
+        if (text.contains("другому устройству")) return ctx.getString(R.string.error_csqtt_device_mismatch)
+        return FATAL_TAG.find(text)?.let { text.substring(it.range.last + 1).trim() } ?: text.trim()
+    }
+
+    private val FATAL_TAG = Regex("""FATAL_[A-Z]+:""")
 
     private const val EVENT_PREFIX = "__CSQTT_EVENT__|"
 
