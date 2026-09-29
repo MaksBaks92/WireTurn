@@ -21,6 +21,7 @@ import com.wireturn.app.LogLevel
 import com.wireturn.app.R
 import com.wireturn.app.data.kernel.FreeTurnConfig
 import com.wireturn.app.data.kernel.OlcrtcConfig
+import com.wireturn.app.data.kernel.CsqttConfig
 import com.wireturn.app.data.kernel.OpenFluxConfig
 import com.wireturn.app.data.kernel.QwdttConfig
 import com.wireturn.app.data.kernel.TurnableConfig
@@ -267,6 +268,7 @@ class AppPreferences(val context: Context) {
                     KernelVariant.FREETURN -> KernelConfig.FreeTurn(snap.freeturn ?: FreeTurnConfig())
                     KernelVariant.QWDTT -> KernelConfig.Qwdtt(snap.qwdtt ?: QwdttConfig())
                     KernelVariant.OPENFLUX -> KernelConfig.OpenFlux(snap.openflux ?: OpenFluxConfig())
+                    KernelVariant.CSQTT -> KernelConfig.Csqtt(snap.csqtt ?: CsqttConfig())
                 }
             } ?: KernelConfig.Turnable()
             ClientConfig(
@@ -326,6 +328,7 @@ class AppPreferences(val context: Context) {
         is KernelConfig.FreeTurn -> KernelSnapshot(variant = KernelVariant.FREETURN.name, freeturn = kernelConfig.config)
         is KernelConfig.Qwdtt -> KernelSnapshot(variant = KernelVariant.QWDTT.name, qwdtt = kernelConfig.config)
         is KernelConfig.OpenFlux -> KernelSnapshot(variant = KernelVariant.OPENFLUX.name, openflux = kernelConfig.config)
+        is KernelConfig.Csqtt -> KernelSnapshot(variant = KernelVariant.CSQTT.name, csqtt = kernelConfig.config)
     }
 
     suspend fun saveFullProfile(id: String, profile: Profile) {

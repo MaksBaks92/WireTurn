@@ -130,6 +130,7 @@
     <string name="wg_not_used_with_webdav">WireGuard is not used with WebDAV</string>
     <string name="wg_not_used_with_qwdtt">WireGuard is not used with qWDTT</string>
     <string name="wg_not_used_with_openflux">WireGuard is not used with OpenFlux</string>
+    <string name="wg_not_used_with_csqtt">WireGuard is not used with CSQTT</string>
 
     <!-- Xray Setup (SOCKS/HTTP) -->
     <string name="xray_title" translatable="false">Xray</string>
@@ -186,6 +187,7 @@
     <string name="kernel_freeturn" translatable="false">FreeTurn</string>
     <string name="kernel_qwdtt" translatable="false">qWDTT</string>
     <string name="kernel_openflux" translatable="false">OpenFlux</string>
+    <string name="kernel_csqtt" translatable="false">CSQTT</string>
     <string name="openflux_platform_label">Platform</string>
     <string name="openflux_yandex_settings_title">Yandex.Docs</string>
     <string name="openflux_vyandex_settings_title">Volga Yandex.Docs</string>
@@ -328,6 +330,9 @@
     <string name="qwdtt_raw_port_label">Raw port</string>
     <string name="qwdtt_raw_port_desc">The server\'s -listen-raw port. When set, VPN without Xray runs straight through the kernel, without hev</string>
     <string name="qwdtt_advanced_settings">Advanced Settings</string>
+    <string name="csqtt_hashes_desc">VK: «https://vk.com/call/join/[ID]». Up to %1$d IDs, separated by commas.</string>
+    <string name="csqtt_workers_desc">In groups of 9, up to %1$d per call ID. Used now: %2$d</string>
+    <string name="csqtt_turn_tcp_desc">TCP/TLS gets through restrictive networks more often; UDP can be faster</string>
     <string name="qwdtt_obfs_label">Obfuscation</string>
     <string name="qwdtt_turn_tcp_label">Transport to TURN relay</string>
     <string name="qwdtt_turn_tcp_desc">TCP is more compatible with restrictive networks; UDP can be faster</string>
@@ -443,6 +448,8 @@
     <string name="error_apk_not_found">APK not found in release</string>
     <string name="error_download_failed">Download error: %1$s</string>
     <string name="log_core_command">* [Core] Command: %1$s</string>
+    <string name="log_core_sidecar_command">* [Core] Sidecar: %1$s</string>
+    <string name="log_core_sidecar_exited">* [Core] Sidecar exited (code: %1$d), restarting the kernel</string>
     <string name="log_core_start">* [Core] TUNNEL STARTING: %1$s</string>
     <string name="log_core_suppressed">* [Core] TUNNEL SUPPRESSED (DIRECT ROUTE)</string>
     <string name="log_core_stopped">* [Core] PROCESS STOPPED (Code: %1$d)</string>
@@ -512,6 +519,7 @@
 
     <string name="error_release_info_failed">Could not get release information</string>
     <string name="error_process_no_output">Process finished with no output (code: %1$d)</string>
+    <string name="error_kernel_unsupported_device">This kernel isn\'t available for this device\'s architecture</string>
     <string name="error_critical_format">* CRITICAL ERROR: %1$s</string>
     <string name="error_connecting">Connection error</string>
     <string name="error_platform_unavailable">Platform unavailable</string>

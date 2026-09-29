@@ -10,7 +10,7 @@ fi
 ROOT_DIR=$(pwd)
 JNI_LIBS_DIR="$ROOT_DIR/app/src/main/jniLibs"
 
-# Select targets: go | cmake | all (default). Determined early so section 3 below
+# Select targets: go | cmake | rust | all (default). Determined early so section 3 below
 # can skip the (Go-only) patched-GOROOT setup for a cmake-only invocation.
 TARGET="${1:-all}"
 
@@ -60,6 +60,21 @@ export GOTOOLCHAIN=go1.26.3+auto
 
 fi
 
+# 3b. Setup Rust (rustup's cargo lives in ~/.cargo/bin, which a plain `bash -l` from Gradle
+# doesn't always have on PATH - its env script is only sourced from interactive shells).
+if [ "$TARGET" = "all" ] || [ "$TARGET" = "rust" ]; then
+    if ! command -v cargo &> /dev/null && [ -f "$HOME/.cargo/env" ]; then
+        . "$HOME/.cargo/env"
+    fi
+    if ! command -v cargo &> /dev/null || ! cargo ndk --version &> /dev/null; then
+        echo "ERROR: cargo / cargo-ndk not found. Install rustup, then:"
+        echo "  rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android"
+        echo "  cargo install cargo-ndk --locked"
+        exit 1
+    fi
+    export ANDROID_NDK_HOME="$NDK_PATH"
+fi
+
 # 4. Build Logic
 # Format per entry: goarch;clang target triple;GOARM (only set for armeabi-v7a, ignored otherwise)
 declare -A ARCH_MAP=(
@@ -76,6 +91,7 @@ ALL_ABIS="arm64-v8a x86_64 armeabi-v7a x86"
 # older actions/cache entry (restored via restore-keys whenever the submodules changed).
 ci_hash_file() { echo "$1/.git_hash_$(basename "$(dirname "$2")")"; }
 
+# $3: source language of the project ("go" by default, or "rust"), for the local mtime check.
 needs_rebuild() {
     [ ! -f "$2" ] && return 0
 
@@ -86,7 +102,9 @@ needs_rebuild() {
         return 0
     fi
 
-    [ -n "$(find "$1" -maxdepth 5 \( -name "*.go" -o -name "go.mod" -o -name "go.sum" \) -newer "$2" -print -quit)" ] && return 0
+    local -a sources=(-name "*.go" -o -name "go.mod" -o -name "go.sum")
+    [ "$3" = "rust" ] && sources=(-name "*.rs" -o -name "Cargo.toml" -o -name "Cargo.lock")
+    [ -n "$(find "$1" -maxdepth 5 \( "${sources[@]}" \) -newer "$2" -print -quit)" ] && return 0
     return 1
 }
 
@@ -139,6 +157,37 @@ build_go_project() {
 
     for pid in "${pids[@]}"; do
         wait "$pid" || exit 1
+    done
+}
+
+# Rust binaries via cargo-ndk. No 32-bit x86 - CSQTT upstream builds and ships only these three
+# (its crypto deps are only exercised there); kernels built this way are hidden on x86 devices.
+RUST_ABIS="arm64-v8a armeabi-v7a x86_64"
+declare -A RUST_TRIPLE=(
+    ["arm64-v8a"]="aarch64-linux-android"
+    ["armeabi-v7a"]="armv7-linux-androideabi"
+    ["x86_64"]="x86_64-linux-android"
+)
+
+build_rust_project() {
+    local dir=$1; local bin_name=$2; local out_name=$3
+    echo "Checking $out_name..."
+    cd "$ROOT_DIR/$dir"
+    # Outside the submodule, so its checkout stays clean; one directory for every ABI, so the
+    # host-side build scripts/proc-macros are compiled once - which also means the ABIs build one
+    # after another (cargo locks the target dir), unlike the parallel Go builds.
+    local target_dir="$ROOT_DIR/build/rust-target/${out_name%.so}"
+
+    for abi in $RUST_ABIS; do
+        local out="$JNI_LIBS_DIR/$abi/$out_name"
+        needs_rebuild "." "$out" rust || continue
+        echo "  → Building $abi..."
+        mkdir -p "$(dirname "$out")"
+        # Same 16 KB page alignment as the Go builds' -z max-page-size (Android 15+ devices).
+        RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384" \
+        cargo ndk -t "$abi" -P "$MIN_SDK" build --release --locked --target-dir "$target_dir"
+        cp "$target_dir/${RUST_TRIPLE[$abi]}/release/$bin_name" "$out"
+        if [ "$CI" = "true" ]; then git rev-parse HEAD > "$(ci_hash_file "." "$out")"; fi
     done
 }
 
@@ -203,6 +252,7 @@ if [ "$TARGET" = "all" ] || [ "$TARGET" = "go" ]; then
     git submodule update --init --recursive --force external/free-turn-proxy
     git submodule update --init --recursive --force external/proxy-turn-vk-android
     git submodule update --init --recursive --force external/openflux
+    git submodule update --init --recursive --force external/socks2tun
     build_go_project "external/olcrtc"       "libolcrtc.so"     "./cmd/olcrtc"
     build_go_project "external/vless-client"  "libxray.so"      "."
     build_go_project "external/turnable"      "libturnable.so"  "./cmd"
@@ -210,6 +260,12 @@ if [ "$TARGET" = "all" ] || [ "$TARGET" = "go" ]; then
     build_go_project "external/free-turn-proxy" "libfreeturn.so" "./cmd/client"
     build_go_project "external/proxy-turn-vk-android/go_client" "libqwdtt.so" "."
     build_go_project "external/openflux"      "libopenflux.so"  "."
+    build_go_project "external/socks2tun"     "libsocks2tun.so" "."
+fi
+
+if [ "$TARGET" = "all" ] || [ "$TARGET" = "rust" ]; then
+    git submodule update --init --recursive --force external/csqtt
+    build_rust_project "external/csqtt/rust-client" "client" "libcsqtt.so"
 fi
 
 chmod +x "$JNI_LIBS_DIR"/*/*.so 2>/dev/null || true

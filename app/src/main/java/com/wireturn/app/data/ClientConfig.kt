@@ -10,6 +10,7 @@ import com.google.gson.JsonSerializationContext
 import com.google.gson.JsonSerializer
 import com.google.gson.annotations.SerializedName
 import com.wireturn.app.R
+import com.wireturn.app.data.kernel.CsqttConfig
 import com.wireturn.app.data.kernel.FreeTurnConfig
 import com.wireturn.app.data.kernel.OlcrtcConfig
 import com.wireturn.app.data.kernel.OpenFluxConfig
@@ -46,6 +47,10 @@ class KernelConfigAdapter : JsonDeserializer<KernelConfig>, JsonSerializer<Kerne
                 jsonObject.addProperty("type", "openflux")
                 jsonObject.add("config", context.serialize(src.config))
             }
+            is KernelConfig.Csqtt -> {
+                jsonObject.addProperty("type", "csqtt")
+                jsonObject.add("config", context.serialize(src.config))
+            }
         }
         return jsonObject
     }
@@ -61,17 +66,18 @@ class KernelConfigAdapter : JsonDeserializer<KernelConfig>, JsonSerializer<Kerne
             "freeturn" -> KernelConfig.FreeTurn(context.deserialize(configElement, FreeTurnConfig::class.java) ?: FreeTurnConfig())
             "qwdtt" -> KernelConfig.Qwdtt(context.deserialize(configElement, QwdttConfig::class.java) ?: QwdttConfig())
             "openflux" -> KernelConfig.OpenFlux(context.deserialize(configElement, OpenFluxConfig::class.java) ?: OpenFluxConfig())
+            "csqtt" -> KernelConfig.Csqtt(context.deserialize(configElement, CsqttConfig::class.java) ?: CsqttConfig())
             else -> KernelConfig.Turnable()
         }
     }
 }
 
 enum class KernelVariant {
-    TURNABLE, OLCRTC, WEBDAV, FREETURN, QWDTT, OPENFLUX;
+    TURNABLE, OLCRTC, WEBDAV, FREETURN, QWDTT, OPENFLUX, CSQTT;
 
-    /** OLCRTC, WEBDAV, QWDTT and OPENFLUX already speak SOCKS5 themselves - Xray's WireGuard overlay is
-     * neither needed nor offered in the UI for them. */
-    val isSocks5Native: Boolean get() = this == OLCRTC || this == WEBDAV || this == QWDTT || this == OPENFLUX
+    /** OLCRTC, WEBDAV, QWDTT and OPENFLUX already speak SOCKS5 themselves (CSQTT through socks2tun) -
+     * Xray's WireGuard overlay is neither needed nor offered in the UI for them. */
+    val isSocks5Native: Boolean get() = this == OLCRTC || this == WEBDAV || this == QWDTT || this == OPENFLUX || this == CSQTT
 
     /** OpenFlux's embedded SOCKS5 server has no auth flags upstream - it never expects credentials,
      * unlike the other SOCKS5-native kernels. See ClientConfig.socksNativeValidationError. */
@@ -86,6 +92,7 @@ sealed class KernelConfig {
     data class FreeTurn(val config: FreeTurnConfig = FreeTurnConfig()) : KernelConfig()
     data class Qwdtt(val config: QwdttConfig = QwdttConfig()) : KernelConfig()
     data class OpenFlux(val config: OpenFluxConfig = OpenFluxConfig()) : KernelConfig()
+    data class Csqtt(val config: CsqttConfig = CsqttConfig()) : KernelConfig()
 
     companion object {
         // The link's own scheme already identifies the kernel, so a single quick-input
@@ -106,6 +113,8 @@ sealed class KernelConfig {
                     QwdttConfig.parse(trimmed)?.let { Qwdtt(it) }
                 trimmed.startsWith("openflux://", ignoreCase = true) ->
                     OpenFluxConfig.parse(trimmed)?.let { OpenFlux(it) }
+                trimmed.startsWith("csqtt://", ignoreCase = true) ->
+                    CsqttConfig.parse(trimmed)?.let { Csqtt(it) }
                 else -> null
             }
         }
@@ -121,6 +130,7 @@ val KernelConfig.variant: KernelVariant get() = when (this) {
     is KernelConfig.FreeTurn -> KernelVariant.FREETURN
     is KernelConfig.Qwdtt -> KernelVariant.QWDTT
     is KernelConfig.OpenFlux -> KernelVariant.OPENFLUX
+    is KernelConfig.Csqtt -> KernelVariant.CSQTT
 }
 
 // Per-kernel display text (name, icon, config screen, ...) lives on each kernel/*/*.kt's Kernel
@@ -204,6 +214,7 @@ data class ClientConfig(
                 is KernelConfig.FreeTurn -> KernelConfig.FreeTurn(k.config.sanitize())
                 is KernelConfig.Qwdtt -> KernelConfig.Qwdtt(k.config.sanitize())
                 is KernelConfig.OpenFlux -> KernelConfig.OpenFlux(k.config.fillDefaults())
+                is KernelConfig.Csqtt -> KernelConfig.Csqtt(k.config.sanitize())
             }
         )
     }
@@ -217,6 +228,7 @@ data class ClientConfig(
         is KernelConfig.FreeTurn -> if (!k.config.isValid()) R.string.error_settings_empty else null
         is KernelConfig.Qwdtt -> socksNativeValidationError(k.config.isValid())
         is KernelConfig.OpenFlux -> socksNativeValidationError(k.config.isValid())
+        is KernelConfig.Csqtt -> socksNativeValidationError(k.config.isValid())
     }
 
     // Shared by every SOCKS5-native kernel: besides its own config being filled in, a public
@@ -441,7 +453,8 @@ internal data class KernelSnapshot(
     @SerializedName("webdav") val webdav: WebdavConfig? = null,
     @SerializedName("freeturn") val freeturn: FreeTurnConfig? = null,
     @SerializedName("qwdtt") val qwdtt: QwdttConfig? = null,
-    @SerializedName("openflux") val openflux: OpenFluxConfig? = null
+    @SerializedName("openflux") val openflux: OpenFluxConfig? = null,
+    @SerializedName("csqtt") val csqtt: CsqttConfig? = null
 )
 
 data class Profile(
@@ -478,6 +491,7 @@ data class Profile(
     val freeturnConfig: FreeTurnConfig get() = (kernelConfig as? KernelConfig.FreeTurn)?.config ?: FreeTurnConfig()
     val qwdttConfig: QwdttConfig get() = (kernelConfig as? KernelConfig.Qwdtt)?.config ?: QwdttConfig()
     val openFluxConfig: OpenFluxConfig get() = (kernelConfig as? KernelConfig.OpenFlux)?.config ?: OpenFluxConfig()
+    val csqttConfig: CsqttConfig get() = (kernelConfig as? KernelConfig.Csqtt)?.config ?: CsqttConfig()
 
     fun isEmpty(): Boolean = when (val k = kernelConfig) {
         is KernelConfig.Turnable -> !k.config.isValid()
@@ -486,6 +500,7 @@ data class Profile(
         is KernelConfig.FreeTurn -> !k.config.isValid()
         is KernelConfig.Qwdtt -> !k.config.isValid()
         is KernelConfig.OpenFlux -> !k.config.isValid()
+        is KernelConfig.Csqtt -> !k.config.isValid()
     } && !wgConfig.isValid() && !vlessConfig.isValid()
 
     fun sanitize(defaultName: String = "Profile"): Profile {
@@ -526,6 +541,7 @@ data class Profile(
             is KernelConfig.FreeTurn -> KernelConfig.FreeTurn(currentKc.config.sanitize())
             is KernelConfig.Qwdtt -> KernelConfig.Qwdtt(currentKc.config.sanitize())
             is KernelConfig.OpenFlux -> KernelConfig.OpenFlux(currentKc.config.sanitize())
+            is KernelConfig.Csqtt -> KernelConfig.Csqtt(currentKc.config.sanitize())
         }
 
         return copy(

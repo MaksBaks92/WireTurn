@@ -947,6 +947,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             trimmed
         )
 
+        val csqtt = com.wireturn.app.data.kernel.CsqttConfig.parse(trimmed)
+        if (csqtt != null) return com.wireturn.app.domain.ImportStatus.KernelConfigDetected(
+            "CSQTT",
+            com.google.gson.Gson().toJson(csqtt),
+            trimmed
+        )
+
         return com.wireturn.app.domain.ImportStatus.InvalidFormat
     }
 

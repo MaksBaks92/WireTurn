@@ -41,6 +41,7 @@ class CreateProfileActivity : ComponentActivity() {
                             "FreeTurn" -> android.content.Intent(this, com.wireturn.app.ui.activities.kernel.FreeTurnConfigActivity::class.java)
                             "qWDTT" -> android.content.Intent(this, com.wireturn.app.ui.activities.kernel.QwdttConfigActivity::class.java)
                             "OpenFlux" -> android.content.Intent(this, com.wireturn.app.ui.activities.kernel.OpenFluxConfigActivity::class.java)
+                            "CSQTT" -> android.content.Intent(this, com.wireturn.app.ui.activities.kernel.CsqttConfigActivity::class.java)
                             else -> null
                         }
                         intent?.let {

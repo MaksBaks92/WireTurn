@@ -116,6 +116,7 @@
     <string name="wg_not_used_with_webdav">WireGuard не используется с WebDAV</string>
     <string name="wg_not_used_with_qwdtt">WireGuard не используется с qWDTT</string>
     <string name="wg_not_used_with_openflux">WireGuard не используется с OpenFlux</string>
+    <string name="wg_not_used_with_csqtt">WireGuard не используется с CSQTT</string>
 
     <!-- Настройка клиента (Backend/Proxy) -->
     <string name="route_title">Маршрут</string>
@@ -281,6 +282,9 @@
     <string name="qwdtt_raw_port_label">Порт raw</string>
     <string name="qwdtt_raw_port_desc">Порт -listen-raw на сервере. Если задан, VPN без Xray работает напрямую через ядро, без hev</string>
     <string name="qwdtt_advanced_settings">Расширенные настройки</string>
+    <string name="csqtt_hashes_desc">VK: Звонки «https://vk.com/call/join/[ID]». До %1$d ID через запятую.</string>
+    <string name="csqtt_workers_desc">Группами по 9, до %1$d на один ID звонка. Сейчас используется: %2$d</string>
+    <string name="csqtt_turn_tcp_desc">TCP/TLS чаще проходит через ограничительные сети; UDP может быть быстрее</string>
     <string name="qwdtt_obfs_label">Обфускация</string>
     <string name="qwdtt_turn_tcp_label">Транспорт до TURN-relay</string>
     <string name="qwdtt_turn_tcp_desc">TCP совместимее с ограничительными сетями; UDP может быть быстрее</string>
@@ -395,6 +399,8 @@
     <string name="error_apk_not_found">APK не найден в релизе</string>
     <string name="error_download_failed">Ошибка загрузки: %1$s</string>
     <string name="log_core_command">* [Core] Команда: %1$s</string>
+    <string name="log_core_sidecar_command">* [Core] Вспомогательный процесс: %1$s</string>
+    <string name="log_core_sidecar_exited">* [Core] Вспомогательный процесс завершился (код: %1$d), перезапуск ядра</string>
     <string name="log_core_start">* [Core] ЗАПУСК ТУННЕЛЯ: %1$s</string>
     <string name="log_core_suppressed">* [Core] ТУННЕЛЬ ПОДАВЛЕН (ПРЯМОЙ МАРШРУТ)</string>
     <string name="log_core_stopped">* [Core] ПРОЦЕСС ОСТАНОВЛЕН (Код: %1$d)</string>
@@ -464,6 +470,7 @@
 
     <string name="error_release_info_failed">Не удалось получить информацию о релизе</string>
     <string name="error_process_no_output">Процесс завершился без вывода (код: %1$d)</string>
+    <string name="error_kernel_unsupported_device">Это ядро недоступно для архитектуры этого устройства</string>
     <string name="error_critical_format">* КРИТИЧЕСКАЯ ОШИБКА: %1$s</string>
     <string name="error_connecting">Ошибка подключения</string>
     <string name="error_platform_unavailable">Платформа недоступна</string>

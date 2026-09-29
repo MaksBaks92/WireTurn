@@ -211,6 +211,9 @@ tasks.register<Exec>("buildGoBinaries") {
     inputs.files(file("${rootDir}/external/openflux"))
         .withPathSensitivity(PathSensitivity.RELATIVE)
         .optional()
+    inputs.files(file("${rootDir}/external/socks2tun"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+        .optional()
     inputs.file(file("${rootDir}/build.sh")).withPathSensitivity(PathSensitivity.RELATIVE)
 
     listOf("arm64-v8a", "x86_64", "armeabi-v7a", "x86").forEach { abi ->
@@ -221,11 +224,31 @@ tasks.register<Exec>("buildGoBinaries") {
         outputs.file(file("${projectDir}/src/main/jniLibs/$abi/libfreeturn.so"))
         outputs.file(file("${projectDir}/src/main/jniLibs/$abi/libqwdtt.so"))
         outputs.file(file("${projectDir}/src/main/jniLibs/$abi/libopenflux.so"))
+        outputs.file(file("${projectDir}/src/main/jniLibs/$abi/libsocks2tun.so"))
     }
     configureNdk()
     wslOrBash("./build.sh go")
 }
 
+// Rust binaries (CSQTT client) via cargo-ndk - no x86, see build.sh's RUST_ABIS
+tasks.register<Exec>("buildRustBinaries") {
+    group = "build"
+    description = "Compiles Rust binaries for Android"
+    workingDir = rootDir
+    // Only rust-client, not the whole submodule - it also carries the official Android app and
+    // the server sources that build.sh never touches.
+    inputs.files(file("${rootDir}/external/csqtt/rust-client"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+        .optional()
+    inputs.file(file("${rootDir}/build.sh")).withPathSensitivity(PathSensitivity.RELATIVE)
+
+    listOf("arm64-v8a", "x86_64", "armeabi-v7a").forEach { abi ->
+        outputs.file(file("${projectDir}/src/main/jniLibs/$abi/libcsqtt.so"))
+    }
+    configureNdk()
+    wslOrBash("./build.sh rust")
+}
+
 tasks.named("preBuild") {
-    dependsOn("buildCBinaries", "buildGoBinaries")
+    dependsOn("buildCBinaries", "buildGoBinaries", "buildRustBinaries")
 }

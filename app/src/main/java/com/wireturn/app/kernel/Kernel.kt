@@ -21,6 +21,11 @@ interface KernelCommandContext {
     // Abstract Unix socket name this run is to take the VPN's TUN from (see
     // Kernel.supportsNativeTun), or null for the usual SOCKS5/listen mode.
     val nativeTunSocket: String? get() = null
+    // A fresh abstract Unix socket name for this run, for a kernel and its sidecar to meet on
+    // (see Kernel.buildSidecarCommand) - the same in both commands of one run.
+    val runSocket: String get() = ""
+    // Stable per install (Settings.Secure.ANDROID_ID) - for servers that bind access to a device.
+    val deviceId: String get() = "unknown"
 }
 
 /**
@@ -55,6 +60,8 @@ interface KernelLogContext {
     // Kernel TUN mode: cumulative bytes through that TUN (rx = down, tx = up) since the process
     // started, in place of hev's counters. Ignored outside that mode.
     fun onNativeTunTraffic(rxBytes: Long, txBytes: Long) {}
+    // One line to this run's sidecar's stdin (Kernel.buildSidecarCommand), if it has one running.
+    fun writeToSidecar(line: String) {}
 }
 
 /** Per-run mutable state threaded through repeated [Kernel.parseLogLine] calls for one binary run. */
@@ -156,6 +163,16 @@ interface Kernel {
     /** Full argv (binary path at index 0) for launching this kernel's binary with [cfg]. */
     fun buildCommand(ctx: KernelCommandContext, cfg: ClientConfig): List<String>
 
+    /** Extra environment variables for the binary's process. */
+    fun environment(cfg: ClientConfig): Map<String, String> = emptyMap()
+
+    /**
+     * Full argv of a second binary to run next to this kernel's own for this run, or null for
+     * none: started first, stopped along with it, and its exit ends the run too. Its output goes
+     * to the log as is; [KernelLogContext.writeToSidecar] feeds its stdin.
+     */
+    fun buildSidecarCommand(ctx: KernelCommandContext, cfg: ClientConfig): List<String>? = null
+
     /**
      * Handles one line of the binary's stdout, updating [CoreServiceState] as needed via [ctx]
      * and [state]. Returns true to stop reading this run's output (fatal error, or a transient
@@ -255,7 +272,7 @@ interface Kernel {
 
 object KernelRegistry {
     private val all: List<Kernel> = listOf(
-        TurnableKernel, OlcrtcKernel, WebdavKernel, FreeTurnKernel, QwdttKernel, OpenFluxKernel
+        TurnableKernel, OlcrtcKernel, WebdavKernel, FreeTurnKernel, QwdttKernel, OpenFluxKernel, CsqttKernel
     )
     private val byVariant = all.associateBy { it.variant }
 

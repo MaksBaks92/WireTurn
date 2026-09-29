@@ -101,11 +101,18 @@ class CoreService : Service() {
     // instead of each one needing direct access to CoreService itself.
     // Set per run when the kernel takes the VPN's TUN itself (usesNativeTun), null otherwise.
     @Volatile private var nativeTunSocket: String? = null
+    // Fresh per run, see KernelCommandContext.runSocket.
+    @Volatile private var runSocket: String = ""
+    // This run's sidecar binary, if its kernel has one (Kernel.buildSidecarCommand).
+    private val sidecar = AtomicReference<Process?>()
 
     private val commandContext = object : KernelCommandContext {
         override val filesDir get() = this@CoreService.filesDir
         override val nativeLibraryDir get() = applicationInfo.nativeLibraryDir
         override val nativeTunSocket get() = this@CoreService.nativeTunSocket
+        override val runSocket get() = this@CoreService.runSocket
+        override val deviceId: String
+            get() = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "unknown"
     }
     private val logContext = object : KernelLogContext {
         override fun getString(resId: Int, vararg args: Any) = this@CoreService.getString(resId, *args)
@@ -129,6 +136,15 @@ class CoreService : Service() {
                     putExtra(HevVpnService.EXTRA_NATIVE_DNS, dns.toTypedArray())
                     putExtra(HevVpnService.EXTRA_NATIVE_MTU, mtu)
                 })
+            }
+        }
+        override fun writeToSidecar(line: String) {
+            try {
+                sidecar.get()?.outputStream?.let {
+                    it.write((line + "\n").toByteArray(Charsets.UTF_8))
+                    it.flush()
+                }
+            } catch (_: Exception) {
             }
         }
         override fun onNativeTunTraffic(rxBytes: Long, txBytes: Long) {
@@ -226,6 +242,7 @@ class CoreService : Service() {
             is KernelConfig.FreeTurn -> "FreeTurn (${k.config.peer})"
             is KernelConfig.Qwdtt -> "qWDTT (${k.config.peer})"
             is KernelConfig.OpenFlux -> "OpenFlux (${k.config.transport})"
+            is KernelConfig.Csqtt -> "CSQTT (${k.config.peer})"
             else -> "-"
         }
         val xrayInfo = if (xrayConfig.enabled) {
@@ -445,6 +462,7 @@ class CoreService : Service() {
             nativeTunSocket = if (usesNativeTun(cfg, prefs.vpnSettingsFlow.first().enabled, prefs.xrayConfigFlow.first().enabled)) {
                 "wireturn_tun_${android.os.Process.myPid()}_${System.nanoTime()}"
             } else null
+            runSocket = "wireturn_run_${android.os.Process.myPid()}_${System.nanoTime()}"
             // The kernel's counters start over with the process; a placeholder until its first
             // sample still marks this run as the one the traffic stats come from.
             CoreServiceState.setNativeTunTraffic(
@@ -530,10 +548,19 @@ class CoreService : Service() {
             return@coroutineScope false
         }
 
+        // Not every kernel is built for every ABI (CSQTT has no 32-bit x86 build) - say so
+        // instead of a bare "cannot run program".
+        if (!java.io.File(cmdArgs[0]).exists()) {
+            CoreServiceState.setStatus(CoreStatus.Error(getString(R.string.error_kernel_unsupported_device)))
+            return@coroutineScope false
+        }
+
+        val kernel = KernelRegistry.get(cfg.kernelVariant)
         val state = BinaryOutputState()
         var startedProc: Process? = null
 
         try {
+            kernel.buildSidecarCommand(commandContext, cfg)?.let { startSidecar(it, cfg) }
             AppLogsState.addLog(getString(R.string.log_core_command, redactedCommandLog(cmdArgs, cfg)))
 
             val proc = withContext(Dispatchers.IO) {
@@ -562,6 +589,7 @@ class CoreService : Service() {
                 if (cfg.useCustomCerts) {
                     caBundlePath?.let { env["SSL_CERT_FILE"] = it }
                 }
+                env.putAll(kernel.environment(cfg))
 
                 // Same non-suspending stretch as start() - a suspension point in between risks
                 // cancellation orphaning the freshly-spawned process with no reference to clean it up.
@@ -604,7 +632,6 @@ class CoreService : Service() {
                 withContext(Dispatchers.IO) {
                     BufferedReader(InputStreamReader(proc.inputStream)).use { reader ->
                         var stopping = false
-                        val kernel = KernelRegistry.get(cfg.kernelVariant)
                         for (rawLine in reader.lineSequence()) {
                             if (!isActive) break
                             // Per-packet trace lines: thousands a second under load, so they go
@@ -724,6 +751,12 @@ class CoreService : Service() {
                 old.socksPass != new.socksPass
             // No SOCKS5 auth flags exist upstream - only socksAddr matters (see buildCommandArgs).
             is KernelConfig.OpenFlux -> old.socksAddr != new.socksAddr
+            // socks2tun's listener, see CsqttKernel.
+            is KernelConfig.Csqtt ->
+                old.socksAddr != new.socksAddr ||
+                old.isSocksAuthEnabled != new.isSocksAuthEnabled ||
+                old.socksUser != new.socksUser ||
+                old.socksPass != new.socksPass
         }
     }
 
@@ -744,13 +777,61 @@ class CoreService : Service() {
     }
 
     private suspend fun stopBinaryProcessGracefully() = stopMutex.withLock {
-        val proc = process.getAndSet(null) ?: return@withLock
+        process.getAndSet(null)?.let { proc ->
+            withContext(Dispatchers.IO) {
+                sendSigTerm(proc)
+                try {
+                    if (!proc.waitFor(5, TimeUnit.SECONDS)) {
+                        proc.destroyForcibly()
+                    }
+                } catch (_: Exception) {
+                    proc.destroyForcibly()
+                }
+            }
+        }
+        // After the kernel, which may still be using what the sidecar serves it until it exits.
+        stopSidecar()
+    }
+
+    // See Kernel.buildSidecarCommand. Its output goes to the log as is, levelled by its kernel.
+    private suspend fun startSidecar(args: List<String>, cfg: ClientConfig) {
+        stopSidecar()
+        val kernel = KernelRegistry.get(cfg.kernelVariant)
+        AppLogsState.addLog(getString(R.string.log_core_sidecar_command, redactedCommandLog(args, cfg)))
+        val proc = withContext(Dispatchers.IO) {
+            ProcessBuilder(args)
+                .directory(filesDir)
+                .redirectErrorStream(true)
+                .apply { environment()["LD_LIBRARY_PATH"] = applicationInfo.nativeLibraryDir }
+                .start()
+        }
+        sidecar.set(proc)
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                proc.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { rawLine ->
+                        val line = AppLogsState.stripAnsi(rawLine)
+                        AppLogsState.addLog(line, kernel.logLevel(line) ?: LogLevels.detect(line))
+                    }
+                }
+            } catch (_: Exception) {
+            }
+            // Still the current one = nobody stopped it: it died under a running kernel, which
+            // is left without what it serves - end the run, the supervisor restarts both.
+            if (sidecar.compareAndSet(proc, null)) {
+                val exitCode = try { proc.waitFor(); proc.exitValue() } catch (_: Exception) { -1 }
+                AppLogsState.addLog(getString(R.string.log_core_sidecar_exited, exitCode))
+                process.get()?.let { sendSigTerm(it) }
+            }
+        }
+    }
+
+    private suspend fun stopSidecar() {
+        val proc = sidecar.getAndSet(null) ?: return
         withContext(Dispatchers.IO) {
             sendSigTerm(proc)
             try {
-                if (!proc.waitFor(5, TimeUnit.SECONDS)) {
-                    proc.destroyForcibly()
-                }
+                if (!proc.waitFor(2, TimeUnit.SECONDS)) proc.destroyForcibly()
             } catch (_: Exception) {
                 proc.destroyForcibly()
             }
