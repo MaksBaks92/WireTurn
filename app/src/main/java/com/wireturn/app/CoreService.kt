@@ -135,6 +135,9 @@ class CoreService : Service() {
             val socket = nativeTunSocket ?: return
             if (userStopped.get()) return
             handler.post {
+                // Checked again once on the main thread: a stop (or this run giving way to the next
+                // one, with its own socket) may have come in between - the tun must not come back up.
+                if (userStopped.get() || nativeTunSocket != socket) return@post
                 startService(Intent(this@CoreService, HevVpnService::class.java).apply {
                     action = HevVpnService.ACTION_START_NATIVE
                     putExtra(HevVpnService.EXTRA_NATIVE_SOCKET, socket)
