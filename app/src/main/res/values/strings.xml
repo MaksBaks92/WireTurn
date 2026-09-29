@@ -462,6 +462,9 @@
     <string name="log_core_foreground_failed">* [Core] Failed to start foreground: %1$s</string>
     <string name="log_core_dual_route_config_changed">* [Core] Dual-route config changed, suppressing until route is determined</string>
     <string name="log_core_config_changed">* [Core] Config changed, restarting binary</string>
+    <string name="log_core_tun_mode_changed">* [Core] VPN mode changed (kernel TUN / hev), restarting binary</string>
+    <string name="log_core_tun_settings_changed">* [Core] VPN settings changed, restarting binary with a new TUN</string>
+    <string name="log_core_tun_retry">* [Core] TUN wasn\'t handed to the kernel, restarting binary</string>
 
     <string name="log_xray_starting">* [Xray] Starting: %1$s</string>
     <string name="log_xray_exited">* [Xray] Process exited with code %1$d</string>

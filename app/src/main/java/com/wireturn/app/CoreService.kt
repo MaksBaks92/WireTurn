@@ -23,6 +23,7 @@ import com.wireturn.app.kernel.KernelRegistry
 import com.wireturn.app.kernel.NetworkQuality
 import com.wireturn.app.kernel.canUpdateConnectingStatus
 import com.wireturn.app.kernel.markConnecting
+import com.wireturn.app.kernel.usesNativeTun
 import com.wireturn.app.viewmodel.AppLifecycleState
 import com.wireturn.app.viewmodel.VpnState
 import com.wireturn.app.viewmodel.XrayState
@@ -42,6 +43,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -115,6 +117,20 @@ class CoreService : Service() {
         override fun setPendingCaptchaSessionId(id: Long) { pendingQwdttCaptchaSessionId.set(id) }
         override fun setLastFailureReason(reason: String) { lastKnownFailureReason = reason }
         override fun setMinRestartDelay(delayMs: Long) { minRestartDelayMs = delayMs }
+        override fun onNativeTunConfig(address: String, dns: List<String>, mtu: Int) {
+            // Only a kernel started in TUN mode gets here with a socket to hand the tun to.
+            val socket = nativeTunSocket ?: return
+            if (userStopped.get()) return
+            handler.post {
+                startService(Intent(this@CoreService, HevVpnService::class.java).apply {
+                    action = HevVpnService.ACTION_START_NATIVE
+                    putExtra(HevVpnService.EXTRA_NATIVE_SOCKET, socket)
+                    putExtra(HevVpnService.EXTRA_NATIVE_ADDRESS, address)
+                    putExtra(HevVpnService.EXTRA_NATIVE_DNS, dns.toTypedArray())
+                    putExtra(HevVpnService.EXTRA_NATIVE_MTU, mtu)
+                })
+            }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -362,6 +378,39 @@ class CoreService : Service() {
                 }
         }
 
+        // VPN mode / Xray toggled while running: whether the kernel takes the tun itself
+        // (usesNativeTun) is a launch flag, so it's restarted into the other mode. In kernel TUN
+        // mode the VPN settings are baked into the tun it already holds, so a change there drops
+        // that tun and restarts the kernel, which asks for a new one.
+        launch {
+            var lastVpnSettings: VpnSettings? = null
+            combine(prefs.vpnSettingsFlow, prefs.xrayConfigFlow.map { it.enabled }) { vpn, xrayOn -> vpn to xrayOn }
+                .distinctUntilChanged()
+                .collect { (vpnSettings, xrayOn) ->
+                    val previous = lastVpnSettings
+                    lastVpnSettings = vpnSettings
+                    if (userStopped.get()) return@collect
+                    val cfg = currentRunningCfg.get() ?: return@collect
+                    // Process first: the socket is set before it starts, so the two read in this
+                    // order describe the same run. With none running, the next run decides anyway.
+                    val running = process.get() != null
+                    val runningNative = nativeTunSocket != null
+                    val wantNative = usesNativeTun(cfg, vpnSettings.enabled, xrayOn)
+                    val settingsChanged = previous != null && previous != vpnSettings
+                    if (runningNative && wantNative && settingsChanged) {
+                        // Even mid-restart: a tun left up would be reused as is by the next run.
+                        withContext(Dispatchers.Main) {
+                            startService(Intent(this@CoreService, HevVpnService::class.java).apply {
+                                action = HevVpnService.ACTION_STOP
+                            })
+                        }
+                        if (running) restartBinaryPlanned(getString(R.string.log_core_tun_settings_changed))
+                    } else if (running && wantNative != runningNative) {
+                        restartBinaryPlanned(getString(R.string.log_core_tun_mode_changed))
+                    }
+                }
+        }
+
         while (isActive && !userStopped.get()) {
             if (CoreServiceState.status.value is CoreStatus.Suppressed) {
                 delay(1_000.milliseconds)
@@ -385,6 +434,11 @@ class CoreService : Service() {
             // this run's own handler (if any) should set it before the failure check below reads it.
             lastKnownFailureReason = null
             minRestartDelayMs = 0L
+            // Decided per run: VPN mode without Xray lets the kernel take the tun itself (no hev).
+            // A fresh name each run - the kernel accepts the tun only once per process.
+            nativeTunSocket = if (usesNativeTun(cfg, prefs.vpnSettingsFlow.first().enabled, prefs.xrayConfigFlow.first().enabled)) {
+                "wireturn_tun_${android.os.Process.myPid()}_${System.nanoTime()}"
+            } else null
             val startupSuccessful = runBinary(cfg)
             val duration = System.currentTimeMillis() - startTime
             
@@ -662,6 +716,18 @@ class CoreService : Service() {
         }
     }
 
+    // Stops the running binary so the supervisor loop brings it straight back (no watchdog
+    // attempt) - picking up anything decided per run, like the TUN mode. No-op if none is running.
+    private suspend fun restartBinaryPlanned(logLine: String) {
+        if (userStopped.get() || process.get() == null) return
+        AppLogsState.addLog(logLine)
+        restartCount = 0
+        CoreServiceState.setStatusText(null)
+        CoreServiceState.setStatus(CoreStatus.Stopping)
+        plannedRestart.set(true)
+        stopBinaryProcessGracefully()
+    }
+
     private fun handleProcessException(e: Exception) {
         AppLogsState.addLog(getString(R.string.error_critical_format, e.message))
     }
@@ -779,7 +845,8 @@ class CoreService : Service() {
 
     // terminalError: the core isn't coming back on its own (watchdog gave up / invalid config),
     // as opposed to a transient gap (mid-retry, switching profiles) that's expected to recover.
-    private data class VpnTargetSignal(val target: VpnTarget?, val terminalError: Boolean)
+    // native: the kernel brings up and holds the tun itself (usesNativeTun) - no hev target.
+    private data class VpnTargetSignal(val target: VpnTarget?, val terminalError: Boolean, val native: Boolean = false)
 
     private data class VpnSupervisorBundle(
         val signal: VpnTargetSignal,
@@ -856,8 +923,21 @@ class CoreService : Service() {
                 }
             }
 
-            combine(targetFlow, prefs.vpnSettingsFlow, VpnServiceState.state) { signal, vpnSettings, vpnState ->
-                VpnSupervisorBundle(signal, vpnSettings, vpnState)
+            // From the prefs rather than what the kernel was started with, so a toggle is acted on
+            // right away instead of retargeting hev at a kernel that's about to restart without it.
+            val nativeFlow = combine(
+                CoreServiceState.session,
+                prefs.vpnSettingsFlow,
+                prefs.xrayConfigFlow
+            ) { coreSession, vpnSettings, xrayConfig ->
+                coreSession != null && usesNativeTun(coreSession.clientConfig, vpnSettings.enabled, xrayConfig.enabled)
+            }.distinctUntilChanged()
+
+            var wasNative = false
+
+            combine(targetFlow, nativeFlow, prefs.vpnSettingsFlow, VpnServiceState.state) { signal, native, vpnSettings, vpnState ->
+                val effective = if (native) VpnTargetSignal(null, signal.terminalError, native = true) else signal
+                VpnSupervisorBundle(effective, vpnSettings, vpnState)
             }.collect { bundle ->
                 withContext(Dispatchers.Main) {
                     val target = bundle.signal.target
@@ -875,6 +955,43 @@ class CoreService : Service() {
                         // Explicit user opt-out - stop immediately, no grace period.
                         if (bundle.vpnState != VpnState.Idle) startService(stopIntent())
                         return@withContext
+                    }
+
+                    if (bundle.signal.native) {
+                        // The kernel asks for its tun itself (onNativeTunConfig) - nothing to start
+                        // or retarget here; settings changes are handled by mainSupervisor.
+                        wasNative = true
+                        pendingStopJob?.cancel()
+                        pendingStopJob = null
+                        if (bundle.vpnState !is VpnState.Error) {
+                            pendingVpnRetryJob?.cancel()
+                            pendingVpnRetryJob = null
+                        }
+                        if (bundle.vpnState != VpnState.Idle && bundle.signal.terminalError) {
+                            startService(stopIntent())
+                        } else if (bundle.vpnState is VpnState.Error && pendingVpnRetryJob == null) {
+                            // The kernel takes a tun only once per process, so a failed establish
+                            // or handover is retried by restarting it.
+                            pendingVpnRetryJob = serviceScope.launch {
+                                delay(VPN_ERROR_RETRY_MS.milliseconds)
+                                pendingVpnRetryJob = null
+                                if (VpnServiceState.state.value is VpnState.Error) {
+                                    restartBinaryPlanned(getString(R.string.log_core_tun_retry))
+                                }
+                            }
+                        }
+                        return@withContext
+                    }
+                    if (wasNative) {
+                        wasNative = false
+                        pendingVpnRetryJob?.cancel()
+                        pendingVpnRetryJob = null
+                        // Leaving kernel TUN mode: that tun has nothing behind it anymore - drop it,
+                        // and the Idle that follows brings hev up on the new target.
+                        if (bundle.vpnState != VpnState.Idle) {
+                            startService(stopIntent())
+                            return@withContext
+                        }
                     }
 
                     if (target == null) {
@@ -1130,6 +1247,7 @@ class CoreService : Service() {
             // would hang forever - killing the process first closes stdout and unblocks it.
             stopBinaryProcessGracefully()
             coreJob?.cancelAndJoin()
+            nativeTunSocket = null
 
             if (disableAutoLaunch) {
                 val prefs = AppPreferences(applicationContext)

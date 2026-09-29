@@ -414,6 +414,9 @@
     <string name="log_core_foreground_failed">* [Core] Ошибка запуска foreground: %1$s</string>
     <string name="log_core_dual_route_config_changed">* [Core] Конфиг Dual-route изменен, подавление до определения маршрута</string>
     <string name="log_core_config_changed">* [Core] Конфиг изменен, перезапуск бинарного файла</string>
+    <string name="log_core_tun_mode_changed">* [Core] Режим VPN изменился (TUN ядра / hev), перезапуск бинарного файла</string>
+    <string name="log_core_tun_settings_changed">* [Core] Настройки VPN изменились, перезапуск бинарного файла с новым TUN</string>
+    <string name="log_core_tun_retry">* [Core] TUN не передан ядру, перезапуск бинарного файла</string>
 
     <string name="log_xray_starting">* [Xray] Запуск: %1$s</string>
     <string name="log_xray_exited">* [Xray] Процесс завершился с кодом %1$d</string>
