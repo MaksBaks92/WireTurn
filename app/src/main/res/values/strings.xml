@@ -475,6 +475,8 @@
     <string name="log_vpn_service_active">* [VPN] Service already running or starting (status=%1$s, job=%2$b)</string>
     <string name="log_vpn_foreground_failed">* [VPN] Failed to start foreground: %1$s</string>
     <string name="log_vpn_establishing">* [VPN] Establishing TUN (hev-socks5-tunnel)</string>
+    <string name="log_vpn_native_establishing">* [VPN] Establishing TUN for the kernel (address %1$s, MTU %2$d)</string>
+    <string name="log_vpn_native_handed">* [VPN] TUN handed to the kernel</string>
     <string name="log_vpn_always_on_start">* [VPN] Started by the system (always-on VPN), starting the current profile</string>
     <string name="log_vpn_always_on_no_target">* [VPN] Nothing to route the VPN to after the always-on start, stopping</string>
     <string name="log_vpn_filtering_disabled">* [VPN] App filtering disabled: all traffic through VPN</string>
