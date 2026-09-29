@@ -325,6 +325,8 @@
     <string name="qwdtt_password_label">Connection password</string>
     <string name="qwdtt_workers_label">Parallel connections</string>
     <string name="qwdtt_workers_desc">Higher value can improve speed</string>
+    <string name="qwdtt_raw_port_label">Raw port</string>
+    <string name="qwdtt_raw_port_desc">The server\'s -listen-raw port. When set, VPN without Xray runs straight through the kernel, without hev</string>
     <string name="qwdtt_advanced_settings">Advanced Settings</string>
     <string name="qwdtt_obfs_label">Obfuscation</string>
     <string name="qwdtt_turn_tcp_label">Transport to TURN relay</string>

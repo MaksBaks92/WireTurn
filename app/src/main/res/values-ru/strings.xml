@@ -278,6 +278,8 @@
     <string name="qwdtt_password_label">Пароль подключения</string>
     <string name="qwdtt_workers_label">Параллельные соединения</string>
     <string name="qwdtt_workers_desc">Чем больше значение, тем выше потенциальная скорость</string>
+    <string name="qwdtt_raw_port_label">Порт raw</string>
+    <string name="qwdtt_raw_port_desc">Порт -listen-raw на сервере. Если задан, VPN без Xray работает напрямую через ядро, без hev</string>
     <string name="qwdtt_advanced_settings">Расширенные настройки</string>
     <string name="qwdtt_obfs_label">Обфускация</string>
     <string name="qwdtt_turn_tcp_label">Транспорт до TURN-relay</string>

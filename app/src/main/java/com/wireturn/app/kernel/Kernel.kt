@@ -49,6 +49,9 @@ interface KernelLogContext {
     // Lower bound for the watchdog's next restart delay (this run only) - for failures that a
     // quick restart makes worse, e.g. an upstream rate limit. A no-op default for other kernels.
     fun setMinRestartDelay(delayMs: Long) {}
+    // Kernel TUN mode (Kernel.supportsNativeTun): the address/DNS/MTU the kernel was assigned,
+    // for the VPN to be built with before it's handed the TUN. A no-op default for other kernels.
+    fun onNativeTunConfig(address: String, dns: List<String>, mtu: Int) {}
 }
 
 /** Per-run mutable state threaded through repeated [Kernel.parseLogLine] calls for one binary run. */
@@ -67,6 +70,11 @@ class BinaryOutputState {
     var freeTurnDtlsOpen = 0
     // olcrtc: the local SOCKS5 listener is up, i.e. the first session came up - see OlcrtcKernel.
     var olcrtcSocksReady = false
+    // qWDTT "-mode rawtun": its "RAW Конфиг" box, gathered line by line - see QwdttKernel.
+    var rawConfigOpen = false
+    var rawConfigIp: String? = null
+    var rawConfigDns: String? = null
+    var rawConfigMtu: Int? = null
 
     // "Give up after N repeats" counters for failure patterns that keep recurring without ever
     // surfacing a terminal error on their own (e.g. a transport that reconnects forever with its

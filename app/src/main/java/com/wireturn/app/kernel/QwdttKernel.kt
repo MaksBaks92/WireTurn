@@ -13,7 +13,8 @@ import com.wireturn.app.data.kernel.QwdttConfig
 import com.wireturn.app.ui.activities.kernel.QwdttConfigActivity
 import java.util.regex.Pattern
 
-// qWDTT (external/proxy-turn-vk-android/go_client, -mode socks only - see docs). Its vocabulary
+// qWDTT (external/proxy-turn-vk-android/go_client): "-mode socks", or "-mode rawtun" taking the
+// VPN's TUN itself when the profile has the server's raw port (supportsNativeTun). Its vocabulary
 // is Russian and unrelated to free-turn-proxy's despite the shared VK-TURN idea.
 object QwdttKernel : Kernel {
     override val variant: KernelVariant = KernelVariant.QWDTT
@@ -55,14 +56,30 @@ object QwdttKernel : Kernel {
         normalized.toUri().getQueryParameter("name")
     } catch (_: Exception) { null }
 
+    // "-mode rawtun": raw IP packets straight through the tunnel, no WireGuard or SOCKS5 - on the
+    // server's separate -listen-raw port, so only when the profile has one (QwdttConfig.rawPort).
+    override fun supportsNativeTun(cfg: KernelConfig): Boolean =
+        (cfg as? KernelConfig.Qwdtt)?.config?.rawPeer() != null
+
     override fun buildCommand(ctx: KernelCommandContext, cfg: ClientConfig): List<String> {
         val cmdArgs = mutableListOf<String>()
         val o = (cfg.kernelConfig as KernelConfig.Qwdtt).config
         cmdArgs.add("${ctx.nativeLibraryDir}/libqwdtt.so")
+        val tunSocket = ctx.nativeTunSocket
+        val rawPeer = if (tunSocket != null) o.rawPeer() else null
+        val rawMode = tunSocket != null && rawPeer != null
+        if (tunSocket != null && rawPeer != null) {
+            // Gets RAWCONF (address/DNS/MTU) from the server, prints it, then waits on this
+            // abstract socket ("@" = abstract namespace for Go's net.ListenUnix) for the TUN.
+            cmdArgs.addAll(listOf("-mode", "rawtun", "-peer", rawPeer, "-tun-fd-sock", "@$tunSocket"))
+        } else {
+            cmdArgs.addAll(listOf(
+                "-mode", "socks",
+                "-socks", cfg.socksAddr.ifBlank { ClientConfig.DEFAULT_SOCKS_ADDR },
+                "-peer", o.peer
+            ))
+        }
         cmdArgs.addAll(listOf(
-            "-mode", "socks",
-            "-socks", cfg.socksAddr.ifBlank { ClientConfig.DEFAULT_SOCKS_ADDR },
-            "-peer", o.peer,
             "-vk", o.vkHashes,
             "-password", o.password,
             "-n", o.workers.toString(),
@@ -73,7 +90,7 @@ object QwdttKernel : Kernel {
         if (o.noTls) cmdArgs.add("-notls")
         if (o.manualCaptcha) cmdArgs.addAll(listOf("-captcha-mode", "wv"))
         if (o.goDns.isNotBlank() && o.goDns != "yandex") cmdArgs.addAll(listOf("-go-dns", o.goDns))
-        if (cfg.isSocksAuthEnabled) {
+        if (!rawMode && cfg.isSocksAuthEnabled) {
             cmdArgs.add("-socks-auth")
             cmdArgs.addAll(listOf("-socks-user", cfg.socksUser))
             cmdArgs.addAll(listOf("-socks-pass", cfg.socksPass))
@@ -109,9 +126,57 @@ object QwdttKernel : Kernel {
             return false
         }
 
-        // 1. Hard errors
+        // 0. "-mode rawtun" (supportsNativeTun): the server's RAWCONF, printed as a box -
+        //   ╔══════════════ RAW Конфиг ══════════════╗
+        //   ║ IP = 10.66.0.2                          ║   (the tunnel address, /32)
+        //   ║ DNS = 1.1.1.1,8.8.8.8                   ║
+        //   ║ MTU = 1280                              ║
+        //   ╚══════════════════════════════════════╝
+        // after which the binary waits on its -tun-fd-sock for the TUN built from these.
+        if (line.contains("RAW Конфиг")) {
+            state.rawConfigOpen = true
+            state.rawConfigIp = null
+            state.rawConfigDns = null
+            state.rawConfigMtu = null
+            return false
+        }
+        if (state.rawConfigOpen) {
+            RAW_CONFIG_FIELD.find(line)?.let { m ->
+                when (m.groupValues[1]) {
+                    "IP" -> state.rawConfigIp = m.groupValues[2]
+                    "DNS" -> state.rawConfigDns = m.groupValues[2]
+                    "MTU" -> state.rawConfigMtu = m.groupValues[2].toIntOrNull()
+                }
+            }
+            if (line.contains("╚")) {
+                state.rawConfigOpen = false
+                val ip = state.rawConfigIp
+                val mtu = state.rawConfigMtu
+                if (ip != null && mtu != null) {
+                    val dns = state.rawConfigDns.orEmpty().split(',').map(String::trim).filter(String::isNotEmpty)
+                    ctx.onNativeTunConfig(ip, dns, mtu)
+                    if (canUpdateConnectingStatus()) markConnecting()
+                    state.startupEmitted = true
+                }
+            }
+            return false
+        }
+        // The TUN reached the binary and traffic flows - rawtun's own "connected", in place of
+        // "[SOCKS] listening", which that mode never prints.
+        if (lower.contains("[raw] tun подключён")) {
+            if (CoreServiceState.status.value !is CoreStatus.Suppressed) {
+                CoreServiceState.setStatus(CoreStatus.Connected)
+                ctx.updateNotification(ctx.getString(R.string.core_active))
+            }
+            state.startupEmitted = true
+            return false
+        }
+
+        // 1. Hard errors ("[RAW] Ошибка"/"Некорректный RAWCONF": rawtun got no usable config or
+        // socket - a restart asks for the same thing again)
         if (lower.startsWith("panic") || lower.contains("fatal_auth") ||
-            lower.contains("нужны -peer и -vk") || lower.contains("нужен -password")) {
+            lower.contains("нужны -peer и -vk") || lower.contains("нужен -password") ||
+            lower.contains("[raw] ошибка") || lower.contains("некорректный rawconf")) {
             if (CoreServiceState.status.value !is CoreStatus.Suppressed) {
                 CoreServiceState.setStatus(CoreStatus.Error(line))
                 ctx.updateNotification(ctx.getString(R.string.error_connecting))
@@ -181,4 +246,7 @@ object QwdttKernel : Kernel {
     // go_client's periodic "[СТАТИСТИКА] Активных: N | ..." line - a fallback Connected signal
     // for when "[SOCKS] listening" was missed (e.g. log ring buffer already rotated past it).
     private val QWDTT_ACTIVE_REGEX = Pattern.compile("""Активных:\s*(\d+)""")
+
+    // One field line of the "RAW Конфиг" box: "║ IP = 10.66.0.2      ║".
+    private val RAW_CONFIG_FIELD = Regex("""\b(IP|DNS|MTU) = (\S+)""")
 }

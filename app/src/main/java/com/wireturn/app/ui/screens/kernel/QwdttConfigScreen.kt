@@ -76,6 +76,8 @@ import com.wireturn.app.ui.StandardLeadingIcon
 import com.wireturn.app.ui.SupportingText
 import com.wireturn.app.ui.SwitchRow
 import com.wireturn.app.ui.TextFieldRow
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import com.wireturn.app.ui.ValidatorUtils
 import com.wireturn.app.ui.noFlingExpandConnection
 import com.wireturn.app.ui.redact
@@ -370,6 +372,18 @@ fun QwdttConfigScreen(
                         steps = 106,
                         supportingText = stringResource(R.string.qwdtt_workers_desc),
                         isModified = isEditMode && config.workers != initialConfig.workers
+                    )
+                }
+                SectionItem {
+                    TextFieldRow(
+                        label = stringResource(R.string.qwdtt_raw_port_label),
+                        value = config.rawPort,
+                        onValueChange = { config = config.copy(rawPort = it.filter(Char::isDigit).take(5)) },
+                        placeholder = "56003",
+                        supportingText = stringResource(R.string.qwdtt_raw_port_desc),
+                        isError = config.rawPort.isNotEmpty() && config.rawPortNumber == null,
+                        isModified = isEditMode && config.rawPort != initialConfig.rawPort,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
                 }
                 SectionItem(position = ItemPosition.Bottom) {

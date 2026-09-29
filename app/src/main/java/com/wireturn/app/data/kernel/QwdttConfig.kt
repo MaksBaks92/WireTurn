@@ -25,9 +25,24 @@ data class QwdttConfig(
     // Maps to "-captcha-mode wv": skips the binary's own automatic captcha-solving chain and
     // always requests our WebView (see CoreService.handleQwdttLog's "selected" branch). Trades
     // away the cases auto-solving would have handled silently for a captcha prompt every time.
-    @SerializedName("manual_captcha") val manualCaptcha: Boolean = false
+    @SerializedName("manual_captcha") val manualCaptcha: Boolean = false,
+    // The server's raw-IP port (its -listen-raw, a separate listener next to the regular one;
+    // the official client's default is 56003). Set = the server does raw IP, so a VPN without
+    // Xray runs "-mode rawtun" there and hands the kernel the TUN itself (Kernel.supportsNativeTun);
+    // blank = no raw mode, always "-mode socks" as before. Not part of the official link format.
+    @SerializedName("raw_port") val rawPort: String = ""
 ) {
     fun isValid(): Boolean = peer.isNotBlank() && vkHashes.isNotBlank() && password.isNotBlank()
+
+    /** Valid raw-IP port, if any - see [rawPort]. */
+    val rawPortNumber: Int? get() = rawPort.trim().toIntOrNull()?.takeIf { it in 1..65535 }
+
+    /** [peer] with its port replaced by [rawPortNumber] - where "-mode rawtun" connects. */
+    fun rawPeer(): String? {
+        val port = rawPortNumber ?: return null
+        val host = peer.substringBeforeLast(':').ifBlank { return null }
+        return "$host:$port"
+    }
 
     fun addressLabel(): String = FreeTurnConfig.maskPeer(peer)
 
@@ -37,7 +52,8 @@ data class QwdttConfig(
         password = (password as Any?)?.toString()?.trim()?.take(256) ?: "",
         workers = workers.coerceIn(1, 108),
         obfsMode = if (obfsMode == "video") "video" else "audio",
-        goDns = ((goDns as Any?)?.toString()?.trim()?.take(100)).let { if (it.isNullOrBlank()) "yandex" else it }
+        goDns = ((goDns as Any?)?.toString()?.trim()?.take(100)).let { if (it.isNullOrBlank()) "yandex" else it },
+        rawPort = (rawPort as Any?)?.toString()?.filter(Char::isDigit)?.take(5) ?: ""
     )
 
     // Deliberately only the official scheme's own fields (name/peer/hashes/workers/pass) - `port`
@@ -82,7 +98,8 @@ data class QwdttConfig(
                     turnTcp = current.turnTcp,
                     goDns = current.goDns,
                     noTls = current.noTls,
-                    manualCaptcha = current.manualCaptcha
+                    manualCaptcha = current.manualCaptcha,
+                    rawPort = current.rawPort
                 )
             }
 
@@ -110,7 +127,8 @@ data class QwdttConfig(
                     turnTcp = current.turnTcp,
                     goDns = current.goDns,
                     noTls = current.noTls,
-                    manualCaptcha = current.manualCaptcha
+                    manualCaptcha = current.manualCaptcha,
+                    rawPort = current.rawPort
                 )
             }
 
@@ -141,7 +159,8 @@ data class QwdttConfig(
                     turnTcp = current.turnTcp,
                     goDns = current.goDns,
                     noTls = current.noTls,
-                    manualCaptcha = current.manualCaptcha
+                    manualCaptcha = current.manualCaptcha,
+                    rawPort = current.rawPort
                 )
             } catch (_: Exception) {
                 null
