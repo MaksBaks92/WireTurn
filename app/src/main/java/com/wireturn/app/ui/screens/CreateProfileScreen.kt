@@ -60,6 +60,12 @@ fun CreateProfileScreen(
     
     var profileName by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(viewModel.nextDefaultProfileName()) }
 
+    // CSQTT isn't built for every ABI (no 32-bit x86, see build.sh's RUST_ABIS) - don't offer a
+    // profile this device could never run.
+    val csqttAvailable = remember {
+        java.io.File(context.applicationInfo.nativeLibraryDir, "libcsqtt.so").exists()
+    }
+
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.noFlingExpandConnection()),
         topBar = {
@@ -127,16 +133,19 @@ fun CreateProfileScreen(
                 }
 
                 SectionItem(
+                    position = if (csqttAvailable) ItemPosition.Middle else ItemPosition.Bottom,
                     onClick = { onSelectType("OpenFlux", null, profileName) }
                 ) {
                     RowLabel(text = stringResource(R.string.kernel_openflux))
                 }
 
-                SectionItem(
-                    position = ItemPosition.Bottom,
-                    onClick = { onSelectType("CSQTT", null, profileName) }
-                ) {
-                    RowLabel(text = stringResource(R.string.kernel_csqtt))
+                if (csqttAvailable) {
+                    SectionItem(
+                        position = ItemPosition.Bottom,
+                        onClick = { onSelectType("CSQTT", null, profileName) }
+                    ) {
+                        RowLabel(text = stringResource(R.string.kernel_csqtt))
+                    }
                 }
             }
 
