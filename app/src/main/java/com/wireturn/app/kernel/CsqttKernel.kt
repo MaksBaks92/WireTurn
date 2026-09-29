@@ -194,16 +194,20 @@ object CsqttKernel : Kernel {
                 val down = payload?.get("bytes_down")?.asLong
                 if (up != null && down != null) ctx.onNativeTunTraffic(down, up)
             }
-            // "Fatal" to the official app, which then stops for good - but only a rejection is
-            // for certain (a password/protocol problem, also logged as FATAL_AUTH/FATAL_PROTOCOL,
-            // point 2 above); an unanswered handshake may just be the server being down, so that
-            // one goes to the watchdog, with the message kept for when it gives up.
+            // "Fatal" to the official app, which then stops for good. A rejection is (a password/
+            // protocol problem, also logged as FATAL_AUTH/FATAL_PROTOCOL, point 2 above). An
+            // unanswered handshake is mostly a wrong password too - the whole exchange is wrapped
+            // with a key derived from it, so the server can't even read a wrong one's request and
+            // never answers - but it may also be the server being down: once goes to the watchdog,
+            // again right after that (this run is already a watchdog retry) is the end.
             "ERROR" -> {
                 if (payload?.get("fatal")?.asBoolean != true) return false
                 val message = readableFailure(ctx, payload.get("message")?.asString.orEmpty())
                 ctx.setLastFailureReason(message)
                 state.startupEmitted = true
-                if (payload.get("code")?.asString == "handshake_rejected") {
+                val code = payload.get("code")?.asString
+                val isRetry = CoreServiceState.restartAttempt.value != null
+                if (code == "handshake_rejected" || (code == "handshake_timeout" && isRetry)) {
                     if (CoreServiceState.status.value !is CoreStatus.Suppressed) {
                         CoreServiceState.setStatus(CoreStatus.Error(message))
                         ctx.updateNotification(ctx.getString(R.string.error_connecting))
