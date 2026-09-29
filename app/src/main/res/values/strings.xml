@@ -522,6 +522,8 @@
     <string name="error_release_info_failed">Could not get release information</string>
     <string name="error_process_no_output">Process finished with no output (code: %1$d)</string>
     <string name="error_csqtt_device_mismatch">This password is bound to another device. Unbind it in the CSQTT server\'s web panel, or use a separate password</string>
+    <string name="error_sidecar_failed">Local SOCKS5 didn\'t start, see the log</string>
+    <string name="error_sidecar_port_in_use">SOCKS5 port %1$s is already in use</string>
     <string name="error_kernel_unsupported_device">This kernel isn\'t available for this device\'s architecture</string>
     <string name="error_critical_format">* CRITICAL ERROR: %1$s</string>
     <string name="error_connecting">Connection error</string>

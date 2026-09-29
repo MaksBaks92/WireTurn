@@ -105,6 +105,8 @@ class CoreService : Service() {
     @Volatile private var runSocket: String = ""
     // This run's sidecar binary, if its kernel has one (Kernel.buildSidecarCommand).
     private val sidecar = AtomicReference<Process?>()
+    // Its output said its listen port was taken - see runBinary's early-death check.
+    @Volatile private var sidecarPortInUse = false
 
     private val commandContext = object : KernelCommandContext {
         override val filesDir get() = this@CoreService.filesDir
@@ -564,7 +566,8 @@ class CoreService : Service() {
         var startedProc: Process? = null
 
         try {
-            kernel.buildSidecarCommand(commandContext, cfg)?.let { startSidecar(it, cfg) }
+            val sidecarArgs = kernel.buildSidecarCommand(commandContext, cfg)
+            sidecarArgs?.let { startSidecar(it, cfg) }
             AppLogsState.addLog(getString(R.string.log_core_command, redactedCommandLog(cmdArgs, cfg)))
 
             val proc = withContext(Dispatchers.IO) {
@@ -601,6 +604,22 @@ class CoreService : Service() {
                     startedProc = it
                     process.set(it)
                 }
+            }
+
+            // The sidecar can die before there's a kernel for its watcher (startSidecar) to stop,
+            // which would leave this kernel up with nothing serving it. Checked after
+            // process.set(): a death from here on is the watcher's to handle. Dying this early is
+            // a setup problem (its port already taken, say) that a restart won't fix - stop here,
+            // with its own output in the log saying why.
+            if (sidecarArgs != null && sidecar.get() == null) {
+                val reason = if (sidecarPortInUse) {
+                    getString(R.string.error_sidecar_port_in_use, cfg.socksAddr)
+                } else {
+                    getString(R.string.error_sidecar_failed)
+                }
+                CoreServiceState.setStatus(CoreStatus.Error(reason))
+                state.startupFailed = true
+                sendSigTerm(proc)
             }
 
             if (cfg.kernelVariant == KernelVariant.OLCRTC) {
@@ -800,6 +819,7 @@ class CoreService : Service() {
     // See Kernel.buildSidecarCommand. Its output goes to the log as is, levelled by its kernel.
     private suspend fun startSidecar(args: List<String>, cfg: ClientConfig) {
         stopSidecar()
+        sidecarPortInUse = false
         val kernel = KernelRegistry.get(cfg.kernelVariant)
         AppLogsState.addLog(getString(R.string.log_core_sidecar_command, redactedCommandLog(args, cfg)))
         val proc = withContext(Dispatchers.IO) {
@@ -816,6 +836,8 @@ class CoreService : Service() {
                     lines.forEach { rawLine ->
                         val line = AppLogsState.stripAnsi(rawLine)
                         AppLogsState.addLog(line, kernel.logLevel(line) ?: LogLevels.detect(line))
+                        // Go's bind error text, e.g. socks2tun's "socks5 listen: ... address already in use".
+                        if (line.contains("address already in use", ignoreCase = true)) sidecarPortInUse = true
                     }
                 }
             } catch (_: Exception) {

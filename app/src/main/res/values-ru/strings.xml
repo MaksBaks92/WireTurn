@@ -472,6 +472,8 @@
     <string name="error_release_info_failed">Не удалось получить информацию о релизе</string>
     <string name="error_process_no_output">Процесс завершился без вывода (код: %1$d)</string>
     <string name="error_csqtt_device_mismatch">Пароль привязан к другому устройству. Отвяжите его в веб-панели сервера CSQTT или используйте отдельный пароль</string>
+    <string name="error_sidecar_failed">Локальный SOCKS5 не запустился, подробности в логе</string>
+    <string name="error_sidecar_port_in_use">Порт SOCKS5 %1$s уже занят</string>
     <string name="error_kernel_unsupported_device">Это ядро недоступно для архитектуры этого устройства</string>
     <string name="error_critical_format">* КРИТИЧЕСКАЯ ОШИБКА: %1$s</string>
     <string name="error_connecting">Ошибка подключения</string>
