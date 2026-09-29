@@ -120,6 +120,19 @@ build_go_project() {
     # it silently leaves go.sum incomplete for this module's deep transitive import list.
     [ ! -f go.sum ] && go mod tidy
 
+    # Fetch what the build needs once, before the parallel ABI builds below: each of them would
+    # otherwise resolve and download the same modules (and the GOTOOLCHAIN switch) on its own at
+    # the same time - four "go: downloading" lines per module in the log. `go list -deps` only
+    # loads packages, no compiling, so any one GOARCH does; the rare module another ABI needs on
+    # top still gets fetched by that build. Skipped when every ABI is already up to date.
+    local abi
+    for abi in $ALL_ABIS; do
+        if needs_rebuild "." "$JNI_LIBS_DIR/$abi/$out_name"; then
+            GOOS=android GOARCH=arm64 CGO_ENABLED=1 go list -deps "$sub_pkg" > /dev/null
+            break
+        fi
+    done
+
     local pids=()
     for abi in $ALL_ABIS; do
         (
