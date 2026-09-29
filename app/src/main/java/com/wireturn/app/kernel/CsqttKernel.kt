@@ -225,7 +225,8 @@ object CsqttKernel : Kernel {
     // ANDROID_ID differs from the official app's, even on the same phone.
     private fun readableFailure(ctx: KernelLogContext, text: String): String {
         if (text.contains("другому устройству")) return ctx.getString(R.string.error_csqtt_device_mismatch)
-        return FATAL_TAG.find(text)?.let { text.substring(it.range.last + 1).trim() } ?: text.trim()
+        val reason = FATAL_TAG.find(text)?.let { text.substring(it.range.last + 1).trim() } ?: text.trim()
+        return reason.replaceFirstChar { it.uppercase() }
     }
 
     private val FATAL_TAG = Regex("""FATAL_[A-Z]+:""")
