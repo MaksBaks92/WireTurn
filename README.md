@@ -4,7 +4,7 @@
 
 # WireTurn — Android WebRTC & WebDAV Tunnel
 
-Android-клиент для [Turnable](https://github.com/TheAirBlow/Turnable), [olcRTC](https://github.com/openlibrecommunity/olcrtc), [WebDAV](https://github.com/spkprsnts/webdav-tunnel), [FreeTurn](https://github.com/samosvalishe/free-turn-proxy), [qWDTT](https://github.com/SpaceNeuroX/proxy-turn-vk-android) и [OpenFlux](https://github.com/p1neappleXpress/OpenFlux) — туннелирование трафика через WebRTC и WebDAV.
+Android-клиент для [Turnable](https://github.com/TheAirBlow/Turnable), [olcRTC](https://github.com/openlibrecommunity/olcrtc), [WebDAV](https://github.com/spkprsnts/webdav-tunnel), [FreeTurn](https://github.com/samosvalishe/free-turn-proxy), [qWDTT](https://github.com/SpaceNeuroX/proxy-turn-vk-android), [OpenFlux](https://github.com/p1neappleXpress/OpenFlux) и [CSQTT](https://github.com/amurcanov/csqtt) — туннелирование трафика через WebRTC и WebDAV.
 
 > **Disclaimer:** Проект предназначен исключительно для образовательных и исследовательских целей.
 
@@ -25,17 +25,20 @@ WireTurn упаковывает трафик в стандартные прот�
 Туннелирование через WebRTC поверх UDP с подпиской на список серверов (поддерживаются как обычные, так и Base64-закодированные подписки), гибкой настройкой обфускации/транспорта до TURN-relay и ручным решением капчи через встроенный браузер при необходимости.
 
 ### qWDTT
-Ещё одно туннелирование через TURN-инфраструктуру звонков VK: WireGuard поверх DTLS-релея, локальный SOCKS5-прокси на клиенте. Ссылки и QR-коды в формате [qWDTT](https://github.com/SpaceNeuroX/proxy-turn-vk-android) (включая устаревшую схему `wdtt://`) распознаются напрямую.
+Ещё одно туннелирование через TURN-инфраструктуру звонков VK: WireGuard поверх DTLS-релея, локальный SOCKS5-прокси на клиенте. Ссылки и QR-коды в формате [qWDTT](https://github.com/SpaceNeuroX/proxy-turn-vk-android) (включая устаревшую схему `wdtt://`) распознаются напрямую. Если на сервере включён raw-режим (`-listen-raw`) и в профиле указан его порт, VPN без Xray работает напрямую через TUN ядра.
 
 ### OpenFlux
 Туннелирование через легитимные сторонние сервисы: **Yandex.Docs** (курсор совместного редактирования как канал передачи данных) или **MAX** (WebRTC DataChannel внутри голосового звонка) — серверная часть подключается к тому же документу/звонку вместо прямого адреса. Локальный SOCKS5-прокси на клиенте, без поддержки авторизации на нём (ограничение самого ядра).
+
+### CSQTT
+Сырые IP-пакеты через TURN-релеи звонков VK, замаскированные под медиатрафик звонка. Само ядро работает только с TUN: в VPN-режиме без Xray оно получает TUN устройства напрямую, в остальных случаях рядом запускается [socks2tun](https://github.com/spkprsnts/socks2tun) и даёт обычный локальный SOCKS5 с авторизацией. Ссылки `csqtt://` официального приложения и серверных панелей распознаются напрямую. Недоступно на `x86`.
 
 ## Возможности
 
 - **Xray-core** — встроенный движок для VLESS/Trojan/Hysteria2 и WireGuard в режиме локального SOCKS5/HTTP-прокси.
 - **Dual-route** — автоматическое переключение на прямой адрес сервера при его доступности, минуя WebRTC-туннель, для снижения задержек.
-- **SOCKS5 Chain** — для SOCKS5-нативных ядер (olcRTC, WebDAV, qWDTT, OpenFlux) подключается к VLESS/Trojan-серверу через локальный SOCKS5 ядра вместо прямого соединения (недоступно для Hysteria2).
-- **VPN-режим и Split Tunneling** — полноценный TUN-режим с исключением (Bypass) или включением (Include) конкретных приложений.
+- **SOCKS5 Chain** — для SOCKS5-нативных ядер (olcRTC, WebDAV, qWDTT, OpenFlux, CSQTT) подключается к VLESS/Trojan-серверу через локальный SOCKS5 ядра вместо прямого соединения (недоступно для Hysteria2).
+- **VPN-режим и Split Tunneling** — полноценный TUN-режим с исключением (Bypass) или включением (Include) конкретных приложений. Ядра, которые умеют работать с TUN сами (CSQTT, qWDTT с raw-портом), без Xray получают TUN напрямую, минуя SOCKS5; такие профили помечены тегом «TUN».
 - **Профили и подписки** — независимые конфигурации, массовый импорт, автообновление по расписанию с учётом квоты трафика; импорт по диплинкам `wireturn://` и `wt://`. Подробности — в [спецификации подписок и профилей](docs/subscriptions.md).
 - **Быстрое управление** — смена профиля из уведомления, Quick Settings Tile и Intent API.
 - **Умное ожидание сети** — восстановление туннеля при появлении интернета без лишних уведомлений об ошибках.
@@ -61,8 +64,8 @@ WireTurn упаковывает трафик в стандартные прот�
 ## Быстрый старт
 
 ### Требования
-- Android 8.0+ (API 26), архитектуры `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`.
-- VPS для серверной части (Turnable, olcRTC, WebDAV, FreeTurn, qWDTT или OpenFlux).
+- Android 8.0+ (API 26), архитектуры `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86` (CSQTT — без `x86`).
+- VPS для серверной части (Turnable, olcRTC, WebDAV, FreeTurn, qWDTT, OpenFlux или CSQTT).
 
 ### Настройка
 - **[WT Panel](https://github.com/spkprsnts/wt-panel)** — панель для создания и управления серверами
@@ -73,7 +76,7 @@ WireTurn упаковывает трафик в стандартные прот�
 
 ## Стек технологий
 
-**Kotlin** + **Jetpack Compose** (Material 3 Expressive). Нативные компоненты (C/Go) собираются из исходников через Git-субмодули:
+**Kotlin** + **Jetpack Compose** (Material 3 Expressive). Нативные компоненты (C/Go/Rust) собираются из исходников через Git-субмодули:
 
 - `libturnable.so` — [TheAirBlow/Turnable](https://github.com/TheAirBlow/Turnable)
 - `libolcrtc.so` — [openlibrecommunity/olcrtc](https://github.com/openlibrecommunity/olcrtc)
@@ -81,6 +84,8 @@ WireTurn упаковывает трафик в стандартные прот�
 - `libfreeturn.so` — [samosvalishe/free-turn-proxy](https://github.com/samosvalishe/free-turn-proxy)
 - `libqwdtt.so` — [SpaceNeuroX/proxy-turn-vk-android](https://github.com/SpaceNeuroX/proxy-turn-vk-android) (`go_client`)
 - `libopenflux.so` — [p1neappleXpress/OpenFlux](https://github.com/p1neappleXpress/OpenFlux)
+- `libcsqtt.so` — [amurcanov/csqtt](https://github.com/amurcanov/csqtt) (`rust-client`)
+- `libsocks2tun.so` — SOCKS5 поверх TUN-only ядер, [spkprsnts/socks2tun](https://github.com/spkprsnts/socks2tun)
 - `libxray.so` — [spkprsnts/vless-client](https://github.com/spkprsnts/vless-client)
 - `libhevsocks5.so` — сетевой стек VPN-режима, [heiher/hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel)
 
@@ -88,14 +93,17 @@ WireTurn упаковывает трафик в стандартные прот�
 
 Сборка нативных библиотек (`.so`) автоматизирована через Gradle-задачи; рекомендуется **Linux** (Ubuntu/Debian) или **Windows + WSL2**.
 
-Зависимости: `build-essential`, `pkg-config`, `golang` (1.23+), `openjdk-21-jdk`, `python3`, `git`, `curl`.
+Зависимости: `build-essential`, `pkg-config`, `cmake`, `golang` (1.23+), `openjdk-21-jdk`, `python3`, `git`, `curl`, а для CSQTT — Rust (через `rustup`) с Android-таргетами и `cargo-ndk`.
 
 ```bash
-sudo apt update && sudo apt install -y build-essential pkg-config git curl golang-go openjdk-21-jdk python3
+sudo apt update && sudo apt install -y build-essential pkg-config cmake git curl golang-go openjdk-21-jdk python3
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+cargo install cargo-ndk --locked
 
 git clone --recursive https://github.com/spkprsnts/WireTurn.git
-./gradlew buildCBinaries buildGoBinaries   # нативные компоненты
-./gradlew assembleDebug                    # APK
+./gradlew buildCBinaries buildGoBinaries buildRustBinaries   # нативные компоненты
+./gradlew assembleDebug                                      # APK
 ```
 
 ## Упоминания
@@ -107,6 +115,8 @@ git clone --recursive https://github.com/spkprsnts/WireTurn.git
 - [samosvalishe/turn-proxy-android](https://github.com/samosvalishe/turn-proxy-android) — база UI и логики.
 - [SpaceNeuroX/proxy-turn-vk-android](https://github.com/SpaceNeuroX/proxy-turn-vk-android) — проект qWDTT.
 - [p1neappleXpress/OpenFlux](https://github.com/p1neappleXpress/OpenFlux) — проект OpenFlux.
+- [amurcanov/csqtt](https://github.com/amurcanov/csqtt) — проект CSQTT (лицензия PolyForm Noncommercial 1.0.0, только некоммерческое использование).
+- [spkprsnts/socks2tun](https://github.com/spkprsnts/socks2tun) — SOCKS5 для TUN-only ядер.
 - [XTLS/Xray-core](https://github.com/XTLS/Xray-core) — кодовая база Xray.
 - [heiher/hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel) — реализация сетевого стека для VPN-режима.
 

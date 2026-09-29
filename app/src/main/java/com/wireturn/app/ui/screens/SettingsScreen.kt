@@ -934,6 +934,28 @@ private fun RepoLinksContent(
 
             item {
                 RepoLinkItem(
+                    title = stringResource(R.string.csqtt_core),
+                    subtitle = "amurcanov/csqtt",
+                    url = "https://github.com/amurcanov/csqtt",
+                    containerColor = containerColor,
+                    onHaptic = { HapticUtil.perform(context, HapticUtil.Pattern.SELECTION) },
+                    onOpen = { uriHandler.openUri(it) }
+                )
+            }
+
+            item {
+                RepoLinkItem(
+                    title = stringResource(R.string.socks2tun),
+                    subtitle = "spkprsnts/socks2tun",
+                    url = "https://github.com/spkprsnts/socks2tun",
+                    containerColor = containerColor,
+                    onHaptic = { HapticUtil.perform(context, HapticUtil.Pattern.SELECTION) },
+                    onOpen = { uriHandler.openUri(it) }
+                )
+            }
+
+            item {
+                RepoLinkItem(
                     title = stringResource(R.string.xray_core_name),
                     subtitle = "spkprsnts/vless-client",
                     url = "https://github.com/spkprsnts/vless-client",
