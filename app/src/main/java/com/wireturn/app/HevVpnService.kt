@@ -508,6 +508,9 @@ misc:
     }
 
     private suspend fun startVpn(socks5Addr: String, socks5User: String?, socks5Pass: String?, mapDns: Boolean) {
+        // The established tun until it's tunInterface's - closed here if this attempt ends before
+        // that, or it would outlive it (and keep the device's VPN up) with nothing to close it.
+        var pending: ParcelFileDescriptor? = null
         try {
             AppLogsState.addLog(getString(R.string.log_vpn_establishing))
             val prefs = AppPreferences(applicationContext)
@@ -536,6 +539,7 @@ misc:
                 stopSelf()
                 return
             }
+            pending = established
             vpnEstablished = true
 
             val tunFd = established.fd
@@ -544,16 +548,18 @@ misc:
 
             nativeLock.withLock {
                 if (isStopping.get()) {
+                    pending = null
                     try { established.close() } catch (_: Exception) {}
                     if (VpnServiceState.state.value == VpnState.Starting) {
                         VpnServiceState.updateStatus(VpnState.Idle)
                     }
                     return
                 }
-                
+
                 synchronized(this@HevVpnService) {
                     tunInterface = established
                 }
+                pending = null
                 nativeTun = null
 
                 AppLogsState.addLog(getString(R.string.log_vpn_starting, tunFd, socks5Addr))
@@ -571,13 +577,20 @@ misc:
                 AppLogsState.addLog(getString(R.string.log_vpn_start))
             }
 
-        } catch (e: Exception) {
-            AppLogsState.addLog(getString(R.string.log_vpn_error, e.message ?: "Unknown"))
-            if (e !is kotlinx.coroutines.CancellationException) {
-                VpnServiceState.updateStatus(VpnState.Error(e.message ?: "Unknown error"))
-            } else if (VpnServiceState.state.value == VpnState.Starting) {
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Superseded, not failed: by a stop (stopVpn/onDestroy, which clean up themselves) or
+            // by a kernel-TUN start (ACTION_START_NATIVE, which replaces the tun). stopVpn() here
+            // would cancel that newer startJob too and flag the service as stopping - the kernel's
+            // tun would then never come up, with VPN mode still on. Only this attempt's own tun.
+            pending?.let { try { it.close() } catch (_: Exception) {} }
+            if (VpnServiceState.state.value == VpnState.Starting) {
                 VpnServiceState.updateStatus(VpnState.Idle)
             }
+            throw e
+        } catch (e: Exception) {
+            pending?.let { try { it.close() } catch (_: Exception) {} }
+            AppLogsState.addLog(getString(R.string.log_vpn_error, e.message ?: "Unknown"))
+            VpnServiceState.updateStatus(VpnState.Error(e.message ?: "Unknown error"))
             stopVpn()
         }
     }
