@@ -71,6 +71,8 @@ data class QwdttConfig(
     }
 
     companion object {
+        private const val DEFAULT_DTLS_PORT = 56000
+
         // Accepts both "qwdtt://config?..." and the schemeless "qwdtt:config?..." variant some
         // sellers' tools emit (same query-string shape either way).
         fun parse(url: String, current: QwdttConfig = QwdttConfig()): QwdttConfig? {
@@ -142,11 +144,13 @@ data class QwdttConfig(
                 // dtls_port/server_port param instead of "host:port" - append it only if peer
                 // doesn't already carry an explicit port (mirrors the official client's own
                 // PeerAddress.ensurePort: an already-present port always wins over these params).
+                // Neither (ildarmaga/wdtt's panel sends a bare host): the official importer's
+                // own default, the server's standard DTLS port.
                 val hasExplicitPort = peerRaw.substringAfterLast(':', "").let { it.isNotEmpty() && it.all(Char::isDigit) }
-                val peer = if (!hasExplicitPort) {
+                val peer = if (!hasExplicitPort && peerRaw.isNotBlank()) {
                     val fallbackPort = (uri.getQueryParameter("dtls_port") ?: uri.getQueryParameter("server_port"))
                         ?.toIntOrNull()?.coerceIn(1, 65535)
-                    if (fallbackPort != null && peerRaw.isNotBlank()) "$peerRaw:$fallbackPort" else peerRaw
+                    "$peerRaw:${fallbackPort ?: DEFAULT_DTLS_PORT}"
                 } else peerRaw
                 val hashes = uri.getQueryParameter("hashes") ?: current.vkHashes
                 if (peer.isBlank() || hashes.isBlank()) return null

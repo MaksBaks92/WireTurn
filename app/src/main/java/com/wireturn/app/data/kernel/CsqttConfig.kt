@@ -25,8 +25,10 @@ data class CsqttConfig(
 ) {
     fun isValid(): Boolean = peer.isNotBlank() && password.isNotBlank() && hashList().isNotEmpty()
 
+    // Whole call links are fine too - the part after /call/join/ is what counts (as in the
+    // official app's stripVkUrl).
     fun hashList(): List<String> = vkHashes.split(Regex("[,\\s]+"))
-        .map(String::trim).filter(String::isNotEmpty).distinct().take(MAX_HASHES)
+        .map(::stripVkCallUrl).filter(String::isNotEmpty).distinct().take(MAX_HASHES)
 
     /** [workers] as the client gets it: whole groups, capped by what the hashes can carry. */
     fun normalizedWorkers(): Int {
@@ -45,19 +47,23 @@ data class CsqttConfig(
     )
 
     // The official app's v2 link - obfs/transport/captcha aren't part of it, they only travel
-    // between WireTurn profiles via the regular kernelConfig JSON.
+    // between WireTurn profiles via the regular kernelConfig JSON. Its hashes are joined by a
+    // literal '+' (each one escaped on its own) - the official app, its server's panel and
+    // swgPanel all split on that, so an encoded comma would read as one long hash there.
     fun toUri(profileName: String? = null): String {
-        val host = peer.substringBeforeLast(':')
+        val host = peer.substringBeforeLast(':').removePrefix("[").removeSuffix("]")
         val port = peer.substringAfterLast(':', "")
         val builder = Uri.Builder().scheme("csqtt").authority("connect")
             .appendQueryParameter("v", "2")
             .appendQueryParameter("host", host)
             .appendQueryParameter("peer", port)
             .appendQueryParameter("password", password)
-        val hashes = hashList()
-        if (hashes.isNotEmpty()) builder.appendQueryParameter("hashes", hashes.joinToString(","))
-        if (!profileName.isNullOrBlank()) builder.appendQueryParameter("name", profileName)
-        return builder.build().toString()
+        return buildString {
+            append(builder.build().toString())
+            val hashes = hashList()
+            if (hashes.isNotEmpty()) append("&hashes=").append(hashes.joinToString("+") { Uri.encode(it) })
+            if (!profileName.isNullOrBlank()) append("&name=").append(Uri.encode(profileName))
+        }
     }
 
     companion object {
@@ -83,7 +89,10 @@ data class CsqttConfig(
                     val port = uri.getQueryParameter("peer")?.trim()?.toIntOrNull()?.takeIf { it in 1..65535 }
                     val password = uri.getQueryParameter("password")?.trim()
                     if (host.isNullOrBlank() || port == null || password.isNullOrBlank()) return null
-                    val hashes = uri.getQueryParameter("hashes")?.takeIf { it.isNotBlank() }
+                    // '+'-joined (see toUri) - getQueryParameter already turns those into spaces.
+                    val hashes = uri.getQueryParameter("hashes")
+                        ?.let { CsqttConfig(vkHashes = it).hashList().joinToString(", ") }
+                        ?.takeIf { it.isNotBlank() }
                     current.copy(peer = "${bracketed(host)}:$port", password = password, vkHashes = hashes ?: current.vkHashes)
                 } else {
                     val host = uri.host?.takeIf { it.isNotBlank() } ?: return null
@@ -98,5 +107,11 @@ data class CsqttConfig(
 
         private fun bracketed(host: String): String =
             if (host.contains(':') && !host.startsWith('[')) "[$host]" else host
+
+        private val VK_CALL_PREFIX = Regex("""^(?:https?://)?(?:m\.)?vk\.(?:com|ru)/call/join/""", RegexOption.IGNORE_CASE)
+
+        fun stripVkCallUrl(input: String): String =
+            input.trim().replace(VK_CALL_PREFIX, "")
+                .substringBefore('?').substringBefore('#').trimEnd('/')
     }
 }
