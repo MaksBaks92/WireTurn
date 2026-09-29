@@ -2,6 +2,8 @@ package com.wireturn.app.kernel
 
 import android.content.Context
 import androidx.core.net.toUri
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.wireturn.app.CaptchaSession
 import com.wireturn.app.CoreServiceState
@@ -190,8 +192,8 @@ object CsqttKernel : Kernel {
             }
             // Exact byte counters through its TUN - see onNativeTunTraffic.
             "STATS" -> {
-                val up = payload?.get("bytes_up")?.asLong
-                val down = payload?.get("bytes_down")?.asLong
+                val up = payload?.longOrNull("bytes_up")
+                val down = payload?.longOrNull("bytes_down")
                 if (up != null && down != null) ctx.onNativeTunTraffic(down, up)
             }
             // "Fatal" to the official app, which then stops for good. A rejection is (a password/
@@ -201,11 +203,11 @@ object CsqttKernel : Kernel {
             // never answers - but it may also be the server being down: once goes to the watchdog,
             // again right after that (this run is already a watchdog retry) is the end.
             "ERROR" -> {
-                if (payload?.get("fatal")?.asBoolean != true) return false
-                val message = readableFailure(ctx, payload.get("message")?.asString.orEmpty())
+                if (payload?.booleanOrNull("fatal") != true) return false
+                val message = readableFailure(ctx, payload.stringOrNull("message").orEmpty())
                 ctx.setLastFailureReason(message)
                 state.startupEmitted = true
-                val code = payload.get("code")?.asString
+                val code = payload.stringOrNull("code")
                 val isRetry = CoreServiceState.restartAttempt.value != null
                 if (code == "handshake_rejected" || (code == "handshake_timeout" && isRetry)) {
                     if (CoreServiceState.status.value !is CoreStatus.Suppressed) {
@@ -230,6 +232,16 @@ object CsqttKernel : Kernel {
     }
 
     private val FATAL_TAG = Regex("""FATAL_[A-Z]+:""")
+
+    // Gson's asLong/asBoolean/asString throw on a null or a value of another type - an event
+    // shaped differently than expected (a newer client) must not end the run from parseLogLine.
+    private fun <T> JsonObject.primitiveOrNull(key: String, read: (JsonElement) -> T): T? = try {
+        get(key)?.takeIf { it.isJsonPrimitive }?.let(read)
+    } catch (_: Exception) { null }
+
+    private fun JsonObject.longOrNull(key: String): Long? = primitiveOrNull(key) { it.asLong }
+    private fun JsonObject.booleanOrNull(key: String): Boolean? = primitiveOrNull(key) { it.asBoolean }
+    private fun JsonObject.stringOrNull(key: String): String? = primitiveOrNull(key) { it.asString }
 
     private const val EVENT_PREFIX = "__CSQTT_EVENT__|"
 
