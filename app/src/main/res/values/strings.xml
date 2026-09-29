@@ -369,8 +369,22 @@
 
     <!-- Onboarding Screen (Onboarding) -->
     <string name="onboarding_title" translatable="false">WireTurn</string>
-    <string name="onboarding_subtitle">Free internet via video call protocols</string>
-    <string name="start">Start</string>
+    <string name="onboarding_subtitle">Free internet over calls, video meetings, clouds and documents</string>
+    <string name="onboarding_feature_tunnels_title">Seven tunnel kernels</string>
+    <string name="onboarding_feature_tunnels_desc">Turnable, olcRTC, FreeTurn, qWDTT, CSQTT, OpenFlux and WebDAV</string>
+    <string name="onboarding_feature_xray_title">Xray on top of the tunnel</string>
+    <string name="onboarding_feature_xray_desc">VLESS, Trojan, Hysteria2 and WireGuard</string>
+    <string name="onboarding_feature_vpn_title">VPN for the whole device</string>
+    <string name="onboarding_feature_vpn_desc">Or only for the apps you choose</string>
+    <string name="onboarding_permissions_desc">So the tunnel keeps running in the background</string>
+    <string name="onboarding_permission_notifications_desc">Connection status and quick controls</string>
+    <string name="onboarding_permission_battery_title">Background work</string>
+    <string name="onboarding_permission_battery_desc">Otherwise battery saving may stop the tunnel</string>
+    <string name="onboarding_allow">Allow</string>
+    <string name="onboarding_granted">Allowed</string>
+    <string name="onboarding_ready_title">All set</string>
+    <string name="onboarding_ready_desc">Add your first profile — from a link, QR code, file or subscription</string>
+    <string name="onboarding_later">Later</string>
 
     <!-- OTA Update -->
     <string name="update_title">Update</string>

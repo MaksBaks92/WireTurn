@@ -319,8 +319,22 @@
     <string name="logs_level_error">Только ошибки</string>
 
     <!-- Экран приветствия (Onboarding) -->
-    <string name="onboarding_subtitle">Свободный интернет через протоколы видеозвонков</string>
-    <string name="start">Начать</string>
+    <string name="onboarding_subtitle">Свободный интернет через звонки, видеовстречи, облака и документы</string>
+    <string name="onboarding_feature_tunnels_title">Семь ядер туннеля</string>
+    <string name="onboarding_feature_tunnels_desc">Turnable, olcRTC, FreeTurn, qWDTT, CSQTT, OpenFlux и WebDAV</string>
+    <string name="onboarding_feature_xray_title">Xray поверх туннеля</string>
+    <string name="onboarding_feature_xray_desc">VLESS, Trojan, Hysteria2 и WireGuard</string>
+    <string name="onboarding_feature_vpn_title">VPN для всего устройства</string>
+    <string name="onboarding_feature_vpn_desc">Или только для выбранных приложений</string>
+    <string name="onboarding_permissions_desc">Чтобы туннель не отключался в фоне</string>
+    <string name="onboarding_permission_notifications_desc">Статус подключения и быстрое управление</string>
+    <string name="onboarding_permission_battery_title">Работа в фоне</string>
+    <string name="onboarding_permission_battery_desc">Иначе экономия заряда может остановить туннель</string>
+    <string name="onboarding_allow">Разрешить</string>
+    <string name="onboarding_granted">Разрешено</string>
+    <string name="onboarding_ready_title">Всё готово</string>
+    <string name="onboarding_ready_desc">Добавьте первый профиль — по ссылке, QR-коду, из файла или по подписке</string>
+    <string name="onboarding_later">Позже</string>
 
     <!-- Обновление приложения (OTA) -->
     <string name="update_title">Обновление</string>

@@ -33,10 +33,12 @@ class OnboardingActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     OnboardingScreen(
-                        onSkip = {
+                        onFinish = { addProfile ->
                             viewModel.setOnboardingDone()
                             startActivity(Intent(this@OnboardingActivity, MainActivity::class.java))
-                            startActivity(Intent(this@OnboardingActivity, AddProfileActivity::class.java))
+                            if (addProfile) {
+                                startActivity(Intent(this@OnboardingActivity, AddProfileActivity::class.java))
+                            }
                             finish()
                         }
                     )
