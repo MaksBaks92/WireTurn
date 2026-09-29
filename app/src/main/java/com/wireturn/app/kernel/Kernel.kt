@@ -18,7 +18,19 @@ enum class NetworkQuality { FAST, SLOW, OFFLINE }
 interface KernelCommandContext {
     val filesDir: File
     val nativeLibraryDir: String
+    // Abstract Unix socket name this run is to take the VPN's TUN from (see
+    // Kernel.supportsNativeTun), or null for the usual SOCKS5/listen mode.
+    val nativeTunSocket: String? get() = null
 }
+
+/**
+ * Whether a run hands the VPN's TUN to the kernel itself: VPN mode on, no Xray on top (Xray needs
+ * the kernel's SOCKS5/listen address), and a kernel and profile that can take a TUN - see
+ * [Kernel.supportsNativeTun]. Otherwise hev relays the VPN into the kernel's (or Xray's) SOCKS5,
+ * as always.
+ */
+fun usesNativeTun(cfg: ClientConfig, vpnEnabled: Boolean, xrayEnabled: Boolean): Boolean =
+    vpnEnabled && !xrayEnabled && KernelRegistry.get(cfg.kernelVariant).supportsNativeTun(cfg.kernelConfig)
 
 /** What a kernel's [Kernel.parseLogLine] needs from the running [com.wireturn.app.CoreService]. */
 interface KernelLogContext {
@@ -170,6 +182,14 @@ interface Kernel {
      * Longer for a kernel that deliberately waits out outages on its own (see TurnableKernel).
      */
     val connectingTimeoutMs: Long get() = 120_000L
+
+    /**
+     * Whether this kernel, with this profile, can take the VPN's TUN itself (raw IP packets, no
+     * hev in between) - used when the VPN runs without Xray, see [usesNativeTun]. The kernel then
+     * gets [KernelCommandContext.nativeTunSocket] in [buildCommand], reports the address/DNS/MTU
+     * the VPN is to be built with, and receives the TUN over that socket.
+     */
+    fun supportsNativeTun(cfg: KernelConfig): Boolean = false
 
     /** Command-line flags whose values should be redacted in the app's own log (see CoreService). */
     val sensitiveCommandFlags: Set<String> get() = emptySet()

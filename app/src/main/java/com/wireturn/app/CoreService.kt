@@ -97,9 +97,13 @@ class CoreService : Service() {
 
     // Adapters handing kernel/*/*.kt implementations only what they need from this Service,
     // instead of each one needing direct access to CoreService itself.
+    // Set per run when the kernel takes the VPN's TUN itself (usesNativeTun), null otherwise.
+    @Volatile private var nativeTunSocket: String? = null
+
     private val commandContext = object : KernelCommandContext {
         override val filesDir get() = this@CoreService.filesDir
         override val nativeLibraryDir get() = applicationInfo.nativeLibraryDir
+        override val nativeTunSocket get() = this@CoreService.nativeTunSocket
     }
     private val logContext = object : KernelLogContext {
         override fun getString(resId: Int, vararg args: Any) = this@CoreService.getString(resId, *args)
