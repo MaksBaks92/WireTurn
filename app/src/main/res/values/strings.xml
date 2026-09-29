@@ -601,6 +601,7 @@
     <string name="kernel_tag_direct" translatable="false">Direct</string>
     <string name="kernel_tag_no_tls" translatable="false">No TLS</string>
     <string name="kernel_tag_turn_tcp" translatable="false">TURN-TCP</string>
+    <string name="kernel_tag_native_tun" translatable="false">TUN</string>
     <string name="kernel_tag_video_obfs" translatable="false">Video Obfs</string>
     <string name="kernel_tag_qr" translatable="false">QR</string>
     <string name="kernel_tag_tile" translatable="false">Tile</string>

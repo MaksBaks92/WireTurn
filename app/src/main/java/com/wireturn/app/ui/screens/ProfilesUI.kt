@@ -165,7 +165,12 @@ internal fun profileSummaryParts(profile: Profile): ProfileSummaryParts {
 
     val kernel = KernelRegistry.get(profile.kernelVariant)
     val primary = kernel.description(context, profile.kernelConfig)
-    val kernelTags = kernel.profileSummaryExtra(context, profile.kernelConfig)
+    val kernelTags = kernel.profileSummaryExtra(context, profile.kernelConfig).toMutableList()
+    // The profile can run VPN mode on the kernel's own TUN, no hev - whenever Xray is off at the
+    // time (see usesNativeTun), so the tag marks the capability regardless of either toggle.
+    if (kernel.supportsNativeTun(profile.kernelConfig)) {
+        kernelTags.add(stringResource(R.string.kernel_tag_native_tun))
+    }
 
     val xrayTags = mutableListOf<String>()
     if (profile.xrayEnabled) {
