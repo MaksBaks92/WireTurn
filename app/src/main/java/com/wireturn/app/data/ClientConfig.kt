@@ -51,6 +51,9 @@ class KernelConfigAdapter : JsonDeserializer<KernelConfig>, JsonSerializer<Kerne
                 jsonObject.addProperty("type", "csqtt")
                 jsonObject.add("config", context.serialize(src.config))
             }
+            is KernelConfig.Direct -> {
+                jsonObject.addProperty("type", "direct")
+            }
         }
         return jsonObject
     }
@@ -67,21 +70,25 @@ class KernelConfigAdapter : JsonDeserializer<KernelConfig>, JsonSerializer<Kerne
             "qwdtt" -> KernelConfig.Qwdtt(context.deserialize(configElement, QwdttConfig::class.java) ?: QwdttConfig())
             "openflux" -> KernelConfig.OpenFlux(context.deserialize(configElement, OpenFluxConfig::class.java) ?: OpenFluxConfig())
             "csqtt" -> KernelConfig.Csqtt(context.deserialize(configElement, CsqttConfig::class.java) ?: CsqttConfig())
+            "direct" -> KernelConfig.Direct
             else -> KernelConfig.Turnable()
         }
     }
 }
 
 enum class KernelVariant {
-    TURNABLE, OLCRTC, WEBDAV, FREETURN, QWDTT, OPENFLUX, CSQTT;
+    TURNABLE, OLCRTC, WEBDAV, FREETURN, QWDTT, OPENFLUX, CSQTT, DIRECT;
 
     /** OLCRTC, WEBDAV, QWDTT and OPENFLUX already speak SOCKS5 themselves (CSQTT through socks2tun) -
      * Xray's WireGuard overlay is neither needed nor offered in the UI for them. */
     val isSocks5Native: Boolean get() = this == OLCRTC || this == WEBDAV || this == QWDTT || this == OPENFLUX || this == CSQTT
 
+    /** Standalone VLESS/Trojan/Hysteria2 profile: no tunnel binary, only Xray. */
+    val isDirect: Boolean get() = this == DIRECT
+
     /** OpenFlux's embedded SOCKS5 server has no auth flags upstream - it never expects credentials,
      * unlike the other SOCKS5-native kernels. See ClientConfig.socksNativeValidationError. */
-    val socks5SupportsAuth: Boolean get() = this != OPENFLUX
+    val socks5SupportsAuth: Boolean get() = this != OPENFLUX && this != DIRECT
 }
 enum class XrayConfiguration { WIREGUARD, VLESS }
 
@@ -93,6 +100,8 @@ sealed class KernelConfig {
     data class Qwdtt(val config: QwdttConfig = QwdttConfig()) : KernelConfig()
     data class OpenFlux(val config: OpenFluxConfig = OpenFluxConfig()) : KernelConfig()
     data class Csqtt(val config: CsqttConfig = CsqttConfig()) : KernelConfig()
+    /** No tunnel kernel - Xray dials the VLESS/Trojan/Hysteria2 link directly. */
+    data object Direct : KernelConfig()
 
     companion object {
         // The link's own scheme already identifies the kernel, so a single quick-input
@@ -131,6 +140,7 @@ val KernelConfig.variant: KernelVariant get() = when (this) {
     is KernelConfig.Qwdtt -> KernelVariant.QWDTT
     is KernelConfig.OpenFlux -> KernelVariant.OPENFLUX
     is KernelConfig.Csqtt -> KernelVariant.CSQTT
+    is KernelConfig.Direct -> KernelVariant.DIRECT
 }
 
 // Per-kernel display text (name, icon, config screen, ...) lives on each kernel/*/*.kt's Kernel
@@ -215,6 +225,7 @@ data class ClientConfig(
                 is KernelConfig.Qwdtt -> KernelConfig.Qwdtt(k.config.sanitize())
                 is KernelConfig.OpenFlux -> KernelConfig.OpenFlux(k.config.fillDefaults())
                 is KernelConfig.Csqtt -> KernelConfig.Csqtt(k.config.sanitize())
+                is KernelConfig.Direct -> KernelConfig.Direct
             }
         )
     }
@@ -229,6 +240,8 @@ data class ClientConfig(
         is KernelConfig.Qwdtt -> socksNativeValidationError(k.config.isValid())
         is KernelConfig.OpenFlux -> socksNativeValidationError(k.config.isValid())
         is KernelConfig.Csqtt -> socksNativeValidationError(k.config.isValid())
+        // Direct has no tunnel config of its own - validity of the VLESS link is checked by Xray.
+        is KernelConfig.Direct -> null
     }
 
     // Shared by every SOCKS5-native kernel: besides its own config being filled in, a public
@@ -501,6 +514,8 @@ data class Profile(
         is KernelConfig.Qwdtt -> !k.config.isValid()
         is KernelConfig.OpenFlux -> !k.config.isValid()
         is KernelConfig.Csqtt -> !k.config.isValid()
+        // A Direct profile is empty until it has a usable VLESS/Trojan/Hysteria2 link.
+        is KernelConfig.Direct -> !vlessConfig.isValid()
     } && !wgConfig.isValid() && !vlessConfig.isValid()
 
     fun sanitize(defaultName: String = "Profile"): Profile {
@@ -509,12 +524,16 @@ data class Profile(
         val safeName = (name as String?) ?: defaultName
 
         var currentKc = (kernelConfig as KernelConfig?) ?: KernelConfig.Turnable()
-        val prot = (xrayProtocol as XrayConfiguration?) ?: XrayConfiguration.WIREGUARD
-        val en = (xrayEnabled as Boolean?) ?: false
+        var prot = (xrayProtocol as XrayConfiguration?) ?: XrayConfiguration.WIREGUARD
+        var en = (xrayEnabled as Boolean?) ?: false
 
         // Profile generation from quick-input URLs
         if (uri?.isNotBlank() == true) {
             KernelConfig.parseUri(uri)?.let { currentKc = it }
+            // A bare vless:// / trojan:// / hy2:// becomes a Direct profile.
+            if (currentKc !is KernelConfig.Direct && ValidatorUtils.isValidVlessLink(uri)) {
+                currentKc = KernelConfig.Direct
+            }
         } else if (turnableUrl?.isNotBlank() == true) {
             TurnableConfig.parse(turnableUrl)?.let { currentKc = KernelConfig.Turnable(it) }
         } else if (olcrtcUrl?.isNotBlank() == true) {
@@ -526,10 +545,25 @@ data class Profile(
         }
 
         // Deep safety for WG and VLESS
-        val wgc = (wgConfig as Any? as? WgConfig ?: WgConfig()).fillDefaults()
-        val vc = (vlessConfig as Any? as? VlessConfig ?: VlessConfig()).sanitize().fillDefaults()
+        var wgc = (wgConfig as Any? as? WgConfig ?: WgConfig()).fillDefaults()
+        var vc = (vlessConfig as Any? as? VlessConfig ?: VlessConfig()).sanitize().fillDefaults()
+
+        // uri quick-input that is itself a VLESS/Trojan/Hysteria2 link fills vlessConfig.
+        if (currentKc is KernelConfig.Direct && !vc.isValid() && uri?.isNotBlank() == true &&
+            ValidatorUtils.isValidVlessLink(uri)
+        ) {
+            vc = VlessConfig(vlessLink = uri).sanitize().fillDefaults()
+        }
 
         val finalName = safeName.takeIf { it.isNotBlank() }?.take(100) ?: defaultName
+
+        // Direct profiles always run Xray in link mode - there is no tunnel without it.
+        if (currentKc is KernelConfig.Direct) {
+            en = true
+            prot = XrayConfiguration.VLESS
+            // Socks5-chain only makes sense over a SOCKS5-native kernel.
+            if (vc.isSocks5Chain) vc = vc.copy(isSocks5Chain = false)
+        }
 
         val sanitizedKc = when (currentKc) {
             is KernelConfig.Turnable -> KernelConfig.Turnable(currentKc.config.sanitize())
@@ -542,6 +576,7 @@ data class Profile(
             is KernelConfig.Qwdtt -> KernelConfig.Qwdtt(currentKc.config.sanitize())
             is KernelConfig.OpenFlux -> KernelConfig.OpenFlux(currentKc.config.sanitize())
             is KernelConfig.Csqtt -> KernelConfig.Csqtt(currentKc.config.sanitize())
+            is KernelConfig.Direct -> KernelConfig.Direct
         }
 
         return copy(

@@ -133,6 +133,7 @@
     <string name="wg_not_used_with_qwdtt">WireGuard is not used with qWDTT</string>
     <string name="wg_not_used_with_openflux">WireGuard is not used with OpenFlux</string>
     <string name="wg_not_used_with_csqtt">WireGuard is not used with CSQTT</string>
+    <string name="wg_not_used_with_direct">WireGuard isn\'t used with a Direct VLESS profile</string>
 
     <!-- Xray Setup (SOCKS/HTTP) -->
     <string name="xray_title" translatable="false">Xray</string>
@@ -190,6 +191,8 @@
     <string name="kernel_qwdtt" translatable="false">qWDTT</string>
     <string name="kernel_openflux" translatable="false">OpenFlux</string>
     <string name="kernel_csqtt" translatable="false">CSQTT</string>
+    <string name="kernel_direct" translatable="false">VLESS</string>
+    <string name="log_core_direct_waiting_xray">* [Core] Direct VLESS mode — waiting for Xray</string>
     <string name="openflux_platform_label">Platform</string>
     <string name="openflux_yandex_settings_title">Yandex.Docs</string>
     <string name="openflux_vyandex_settings_title">Volga Yandex.Docs</string>
@@ -601,7 +604,7 @@
 
     <!-- Xray link setup (VLESS / Trojan / Hysteria2) -->
     <string name="xray_uri_config_label">Configuration URI</string>
-    <string name="xray_uri_config_supported_protocols">Supported: VLESS, Trojan, Hysteria2</string>
+    <string name="xray_uri_config_supported_protocols">Supported: VLESS, Trojan, Hysteria2 (TCP, WS, gRPC, XHTTP, mKCP, REALITY, ECH)</string>
     <string name="xray_uri_link_placeholder">vless://…</string>
     <string name="xray_uri_dual_route">Dual-route mode</string>
     <string name="xray_uri_dual_route_settings_title">Dual Route settings</string>

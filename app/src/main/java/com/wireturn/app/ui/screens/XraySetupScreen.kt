@@ -114,7 +114,7 @@ fun XraySetupScreen(
     val kernelName = stringResource(KernelRegistry.get(kernelVariant).displayNameRes)
     val xraySubtitle = if (isEditMode && profileName != null) "$kernelName: $profileName" else null
     val canChangeProtocol = remember(kernelVariant) {
-        !kernelVariant.isSocks5Native
+        !kernelVariant.isSocks5Native && !kernelVariant.isDirect
     }
 
     var xrayConfiguration by remember(initialXrayConfig, kernelVariant, canChangeProtocol) {

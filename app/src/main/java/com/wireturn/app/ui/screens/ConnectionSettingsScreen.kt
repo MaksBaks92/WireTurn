@@ -324,6 +324,7 @@ fun ConnectionSettingsScreen(
             }
 
             // Local listen port (Turnable / FreeTurn / qWDTT - see the `listenAddr` comment above)
+            if (!initialClientConfig.kernelVariant.isDirect) {
             SectionGroup(title = stringResource(R.string.settings_group_kernel_params)) {
                 SectionItem(position = ItemPosition.Single) {
                     TextFieldRow(
@@ -339,8 +340,10 @@ fun ConnectionSettingsScreen(
                     )
                 }
             }
+            }
 
             // SOCKS5-native kernels (olcRTC, WebDAV, qWDTT, OpenFlux - see KernelVariant.isSocks5Native)
+            if (!initialClientConfig.kernelVariant.isDirect) {
             val kernelSupportsSocksAuth = initialClientConfig.kernelVariant.socks5SupportsAuth
             val clientSocksIsPublic = clientSocks.isNotEmpty() &&
                     ValidatorUtils.isValidHostPort(clientSocks) && !ValidatorUtils.isLoopbackHostPort(clientSocks)
@@ -444,6 +447,7 @@ fun ConnectionSettingsScreen(
                     }
                 }
             }
+            } // !isDirect socks section
         }
     }
 

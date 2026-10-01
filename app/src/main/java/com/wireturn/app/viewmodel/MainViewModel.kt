@@ -26,12 +26,14 @@ import com.wireturn.app.XrayServiceState
 import com.wireturn.app.data.AppPreferences
 import com.wireturn.app.data.AutoLaunchSettings
 import com.wireturn.app.data.ClientConfig
+import com.wireturn.app.data.KernelConfig
 import com.wireturn.app.data.Profile
 import com.wireturn.app.data.ThemeMode
 import com.wireturn.app.data.VlessConfig
 import com.wireturn.app.data.VpnSettings
 import com.wireturn.app.data.WgConfig
 import com.wireturn.app.data.XrayConfig
+import com.wireturn.app.data.XrayConfiguration
 import com.wireturn.app.data.XraySettings
 import com.wireturn.app.data.kernel.FreeTurnConfig
 import com.wireturn.app.data.kernel.OlcrtcConfig
@@ -43,6 +45,8 @@ import com.wireturn.app.domain.AppUpdater
 import com.wireturn.app.domain.CoreManager
 import com.wireturn.app.domain.ProfileManager
 import com.wireturn.app.domain.activeLocalSocksProxy
+import androidx.core.net.toUri
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -953,6 +957,52 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             com.google.gson.Gson().toJson(csqtt),
             trimmed
         )
+
+        // 5. Standalone VLESS/Trojan/Hysteria2 link (or a multi-line list of them)
+        if (com.wireturn.app.ui.ValidatorUtils.isValidVlessLink(trimmed)) {
+            val name = try {
+                val frag = trimmed.toUri().fragment?.let { android.net.Uri.decode(it) }?.takeIf { it.isNotBlank() }
+                frag ?: trimmed.toUri().host ?: "VLESS"
+            } catch (_: Exception) { "VLESS" }
+            val profile = Profile(
+                id = java.util.UUID.randomUUID().toString(),
+                name = name,
+                kernelConfig = KernelConfig.Direct,
+                xrayEnabled = true,
+                xrayProtocol = XrayConfiguration.VLESS,
+                vlessConfig = VlessConfig(vlessLink = trimmed)
+            ).sanitize()
+            val (result, imported) = importProfilesWithResult(listOf(null to Gson().toJson(profile)))
+            return com.wireturn.app.domain.ImportStatus.Success(imported.firstOrNull()?.id, result)
+        }
+        // Multi-line clipboard paste of proxy links (same body panels put in subscriptions).
+        if (trimmed.lines().any { com.wireturn.app.ui.ValidatorUtils.isValidVlessLink(it.trim()) }) {
+            val profiles = mutableListOf<Profile>()
+            for (line in trimmed.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }) {
+                if (!com.wireturn.app.ui.ValidatorUtils.isValidVlessLink(line)) {
+                    if (profiles.isNotEmpty()) break
+                    return com.wireturn.app.domain.ImportStatus.InvalidFormat
+                }
+                val name = try {
+                    val frag = line.toUri().fragment?.let { android.net.Uri.decode(it) }?.takeIf { it.isNotBlank() }
+                    frag ?: line.toUri().host ?: "VLESS"
+                } catch (_: Exception) { "VLESS" }
+                profiles.add(
+                    Profile(
+                        id = java.util.UUID.nameUUIDFromBytes(line.toByteArray()).toString(),
+                        name = name,
+                        kernelConfig = KernelConfig.Direct,
+                        xrayEnabled = true,
+                        xrayProtocol = XrayConfiguration.VLESS,
+                        vlessConfig = VlessConfig(vlessLink = line)
+                    )
+                )
+            }
+            if (profiles.isNotEmpty()) {
+                val (result, imported) = importProfilesWithResult(listOf(null to Gson().toJson(profiles)))
+                return com.wireturn.app.domain.ImportStatus.Success(imported.firstOrNull()?.id, result)
+            }
+        }
 
         return com.wireturn.app.domain.ImportStatus.InvalidFormat
     }

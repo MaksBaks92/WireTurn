@@ -118,6 +118,8 @@
     <string name="wg_not_used_with_qwdtt">WireGuard не используется с qWDTT</string>
     <string name="wg_not_used_with_openflux">WireGuard не используется с OpenFlux</string>
     <string name="wg_not_used_with_csqtt">WireGuard не используется с CSQTT</string>
+    <string name="wg_not_used_with_direct">WireGuard не используется с прямым профилем VLESS</string>
+    <string name="log_core_direct_waiting_xray">* [Core] Режим Direct VLESS — ожидание Xray</string>
 
     <!-- Настройка клиента (Backend/Proxy) -->
     <string name="route_title">Маршрут</string>
@@ -538,7 +540,7 @@
 
     <!-- Настройка ссылки Xray (VLESS / Trojan / Hysteria2) -->
     <string name="xray_uri_config_label">URI конфигурации</string>
-    <string name="xray_uri_config_supported_protocols">Поддерживаются: VLESS, Trojan, Hysteria2</string>
+    <string name="xray_uri_config_supported_protocols">Поддерживаются: VLESS, Trojan, Hysteria2 (TCP, WS, gRPC, XHTTP, mKCP, REALITY, ECH)</string>
     <string name="xray_uri_link_placeholder">vless://…</string>
     <string name="xray_uri_dual_route">Режим Dual-route</string>
     <string name="xray_uri_dual_route_settings_title">Настройки Dual Route</string>

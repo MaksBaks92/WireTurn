@@ -366,6 +366,7 @@ fun ProfilesBlock(
                             val intent = Intent(context, configActivityClassFor(currentProfile.kernelVariant))
                             intent.putExtra("EXTRA_EDIT_MODE", true)
                             intent.putExtra("EXTRA_PROFILE_NAME", currentProfile.name)
+                            intent.putExtra("EXTRA_PROFILE_ID", currentProfile.id)
                             context.startActivity(intent)
                         }) {
                             Icon(
@@ -1790,6 +1791,7 @@ private fun ProfileItemRow(
                                 context.startActivity(intent)
                             }
                         )
+                        if (!profile.kernelVariant.isDirect) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.xray_title)) },
                             leadingIcon = {
@@ -1807,6 +1809,7 @@ private fun ProfileItemRow(
                                 context.startActivity(intent)
                             }
                         )
+                        }
                     }
                     ExportDropdownMenus(
                         expandedFormat = false,

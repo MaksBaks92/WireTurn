@@ -252,6 +252,7 @@ class CoreService : Service() {
             is KernelConfig.Qwdtt -> "qWDTT (${k.config.peer})"
             is KernelConfig.OpenFlux -> "OpenFlux (${k.config.transport})"
             is KernelConfig.Csqtt -> "CSQTT (${k.config.peer})"
+            is KernelConfig.Direct -> "Direct VLESS"
             else -> "-"
         }
         val xrayInfo = if (xrayConfig.enabled) {
@@ -261,7 +262,11 @@ class CoreService : Service() {
         AppLogsState.addLog(getString(R.string.log_core_profile_summary, kernelInfo, xrayInfo))
 
         val isXrayVless = xrayConfig.protocol == com.wireturn.app.data.XrayConfiguration.VLESS
-        val isDualRouteStart = xrayConfig.enabled && isXrayVless && vlessConfig.isDualRoute
+        val isDirectKernel = currentRunningCfg.get()?.kernelVariant?.isDirect == true
+        // Dual-route suppression only applies when there is a tunnel binary to pause. On Direct,
+        // both routes live inside Xray itself - keep CoreService in Starting/Connecting so the
+        // Xray supervisor actually launches.
+        val isDualRouteStart = !isDirectKernel && xrayConfig.enabled && isXrayVless && vlessConfig.isDualRoute
 
         NotificationHelper.cancelErrorNotification(this)
         
@@ -321,7 +326,10 @@ class CoreService : Service() {
                 // Это предотвращает преждевременный запуск бинарника при отключении Dual-route,
                 // пока Xray еще не перезагружен с новыми настройками.
                 val effectiveVless = if (state != XrayState.Idle) (xraySession?.vless ?: vless) else vless
-                val isDualRoute = xray.enabled && isXrayVless && effectiveVless.isDualRoute
+                val runningKernel = CoreServiceState.session.value?.clientConfig?.kernelVariant
+                // Direct has no tunnel binary to suppress - dual-route is entirely inside Xray.
+                val isDualRoute = runningKernel?.isDirect != true &&
+                    xray.enabled && isXrayVless && effectiveVless.isDualRoute
 
                 if (isDualRoute) {
                     when (state) {
@@ -393,7 +401,8 @@ class CoreService : Service() {
 
                         val xrayConfig = prefs.xrayConfigFlow.first()
                         val vlessConfig = prefs.vlessConfigFlow.first()
-                        val isDualRoute = xrayConfig.enabled &&
+                        val isDualRoute = !newCfg.kernelVariant.isDirect &&
+                            xrayConfig.enabled &&
                             xrayConfig.protocol == com.wireturn.app.data.XrayConfiguration.VLESS &&
                             vlessConfig.isDualRoute
                         if (isDualRoute && CoreServiceState.status.value !is CoreStatus.Idle) {
@@ -461,6 +470,11 @@ class CoreService : Service() {
             }
 
             val cfg = currentRunningCfg.get() ?: break
+            // Standalone VLESS: no tunnel binary - supervise Xray until stop / kernel change.
+            if (cfg.kernelVariant.isDirect) {
+                runDirectMode()
+                continue
+            }
             val startTime = System.currentTimeMillis()
             // Reset so a stale reason from an earlier, unrelated cycle can't outlive it - only
             // this run's own handler (if any) should set it before the failure check below reads it.
@@ -751,6 +765,53 @@ class CoreService : Service() {
     private fun buildCommandArgs(cfg: ClientConfig): List<String> =
         KernelRegistry.get(cfg.kernelVariant).buildCommand(commandContext, cfg)
 
+    /**
+     * Direct (standalone VLESS) mode: no tunnel binary. Stay in Connecting until Xray reports
+     * Running, then Connected. Exits when the user stops, the kernel changes away from Direct,
+     * or CoreService status collapses to Idle/Error/Stopping.
+     */
+    private suspend fun runDirectMode() {
+        CoreServiceState.setStatus(CoreStatus.Connecting)
+        CoreServiceState.setStatusText(null)
+        AppLogsState.addLog(getString(R.string.log_core_direct_waiting_xray))
+
+        while (!userStopped.get()) {
+            val cfg = currentRunningCfg.get() ?: break
+            if (!cfg.kernelVariant.isDirect) break
+
+            when (val status = CoreServiceState.status.value) {
+                is CoreStatus.Idle, is CoreStatus.Error, is CoreStatus.Stopping -> break
+                is CoreStatus.WaitingForNetwork, is CoreStatus.CaptchaRequired, is CoreStatus.Suppressed -> {
+                    delay(500.milliseconds)
+                    continue
+                }
+                else -> {}
+            }
+
+            when (XrayServiceState.state.value) {
+                XrayState.Running, XrayState.DirectRoute -> {
+                    if (CoreServiceState.status.value !is CoreStatus.Connected) {
+                        CoreServiceState.setStatus(CoreStatus.Connected)
+                        CoreServiceState.setStatusText(null)
+                    }
+                }
+                XrayState.Idle -> {
+                    // Xray supervisor should have started it; keep Connecting while Starting/Idle
+                    // early on. If Xray stays Idle with Direct, the profile is missing a link -
+                    // XrayService will log and stop itself; we stay Connecting until the user stops.
+                    if (CoreServiceState.status.value is CoreStatus.Connected) {
+                        CoreServiceState.setStatus(CoreStatus.Connecting)
+                    }
+                }
+                XrayState.Starting, XrayState.Connecting -> {
+                    if (CoreServiceState.status.value is CoreStatus.Connected) {
+                        CoreServiceState.setStatus(CoreStatus.Connecting)
+                    }
+                }
+            }
+            delay(400.milliseconds)
+        }
+    }
 
     private fun requiresBinaryRestart(old: ClientConfig, new: ClientConfig): Boolean {
         if (old.kernelConfig != new.kernelConfig) return true
@@ -783,6 +844,8 @@ class CoreService : Service() {
                 old.isSocksAuthEnabled != new.isSocksAuthEnabled ||
                 old.socksUser != new.socksUser ||
                 old.socksPass != new.socksPass
+            // No tunnel binary - a "restart" is just Xray's supervisor reacting to config changes.
+            is KernelConfig.Direct -> false
         }
     }
 

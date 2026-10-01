@@ -346,6 +346,21 @@ csqtt://connect?v=2&host=1.2.3.4&peer=46000&password=Sup3rSecret&hashes=abc123de
 
 **TUN или SOCKS5.** Ядро работает только с TUN. В VPN-режиме без Xray оно получает TUN устройства напрямую; в остальных режимах WireTurn запускает рядом [socks2tun](https://github.com/spkprsnts/socks2tun), и ядро ведёт себя как обычное SOCKS5-нативное (локальный SOCKS5 с авторизацией). На `x86` ядро недоступно.
 
+### 2.8 Direct (standalone VLESS / Trojan / Hysteria2)
+
+Профиль без туннельного ядра: только Xray. В JSON это `"kernelConfig": { "type": "direct" }` плюс обязательные `xrayEnabled: true`, `xrayProtocol: "VLESS"` и `vlessConfig.vlessLink`.
+
+Быстрый ввод через `uri`:
+
+```json
+{
+  "name": "CF XHTTP",
+  "uri": "vless://UUID@cdn.example.com:443?type=xhttp&security=reality&pbk=...&sni=...&extra=%7B%22xPaddingObfsMode%22%3Atrue%7D#CF"
+}
+```
+
+Ссылка уходит в vless-client без подмены адреса — TCP / WS / gRPC / **XHTTP** (`extra`, mode, path, host) / mKCP, TLS / REALITY / ECH и остальные query-параметры применяются как есть.
+
 ---
 
 ## 3. Xray-оверлей (VLESS/Trojan/Hysteria2 / WireGuard)
@@ -357,7 +372,7 @@ csqtt://connect?v=2&host=1.2.3.4&peer=46000&password=Sup3rSecret&hashes=abc123de
 
 `xrayProtocol: "VLESS"` — это не буквально протокол VLESS, а общий режим «по ссылке»: приложение принимает `vless://`, `trojan://`, `hysteria2://` и `hy2://` в `vlessConfig.vlessLink` и автоматически определяет протокол по схеме ссылки (используется для отображения в UI — «VLESS»/«Trojan»/«Hysteria2»). Имя поля/значения сохранено для обратной совместимости со старыми панелями и сохранёнными профилями.
 
-**Совместимость с ядрами:** `OLCRTC`, `WEBDAV`, `QWDTT`, `OPENFLUX` и `CSQTT` — SOCKS5-нативные ядра, поверх них доступен только режим `VLESS` (т.е. любая из ссылок VLESS/Trojan/Hysteria2; WireGuard-оверлей недоступен в UI). `TURNABLE` и `FREETURN` поддерживают оба режима.
+**Совместимость с ядрами:** `DIRECT` — самостоятельный профиль без туннельного ядра: обязателен режим `VLESS` (ссылка `vless://` / `trojan://` / `hysteria2://` / `hy2://`), Xray всегда включён. Ссылка передаётся в vless-client как есть — все транспорты из URI (TCP, WebSocket, gRPC, **XHTTP** с `extra`, mKCP), TLS/REALITY/ECH, `flow`, `fp`, `path`, `host` и т.д. разбираются клиентом. `OLCRTC`, `WEBDAV`, `QWDTT`, `OPENFLUX` и `CSQTT` — SOCKS5-нативные ядра, поверх них доступен только режим `VLESS` (WireGuard-оверлей недоступен в UI). `TURNABLE` и `FREETURN` поддерживают оба режима.
 
 ### `vlessConfig`
 
@@ -375,6 +390,8 @@ csqtt://connect?v=2&host=1.2.3.4&peer=46000&password=Sup3rSecret&hashes=abc123de
 
 | Ядро | Флаги | Маршрут |
 | :--- | :--- | :--- |
+| Direct | — | Прямое подключение по ссылке (хост/порт/транспорт из URI без подмены). |
+| Direct | `isDualRoute` | Предпочтительный `directAddress`; запасной — хост из самой ссылки. |
 | Turnable, FreeTurn | — | Подключение по ссылке, но адрес и порт в ней заменяются локальным адресом ядра: трафик идёт к серверу Xray через туннель ядра. |
 | Turnable, FreeTurn | `isDualRoute` | Прямо к серверу Xray на `directAddress`; при недоступности — через ядро, как выше. |
 | SOCKS5-ядра (olcRTC, WebDAV, qWDTT, OpenFlux, CSQTT) | — | Ссылка **не используется** (может быть пустой): Xray просто передаёт трафик в SOCKS5 ядра, выход в интернет — на стороне сервера ядра. |
@@ -474,8 +491,10 @@ encode("https://panel.example.com/sub/user123")
 1. **`ProfileBundle` JSON** (рекомендуется) — объект с полями из таблицы ниже.
 2. **Голый массив профилей** `[{ ...Profile }, ...]` — эквивалент `ProfileBundle` с одним полем `profiles`.
 3. **`wireturn://`-blob без префикса** — тело ответа целиком является Base64URL(zlib(JSON)) из §4 (JSON внутри — объект `ProfileBundle` или массив профилей).
-4. **Текстовая подписка** (см. §5.5) — построчный формат, как в `sub.md` у olcRTC/FreeTurn.
-5. **Base64 текстовой подписки** — то же самое, что и п. 4, но тело закодировано обычным (не zlib-сжатым) Base64 — так отдают некоторые панели вроде 3x-ui, если научить их дополнительно раздавать кернел-ссылки.
+4. **Текстовая подписка** (см. §5.5) — построчный формат, как в `sub.md` у olcRTC/FreeTurn; в ней же допускаются голые строки `vless://` / `trojan://` / `hysteria2://` / `hy2://` как профили Direct.
+5. **Base64 текстовой подписки** — то же самое, что и п. 4, но тело закодировано обычным (не zlib-сжатым) Base64.
+6. **Список URI** — одна ссылка `vless://` / `trojan://` / `hysteria2://` / `hy2://` на строку (формат v2rayN / 3x-ui). Каждая строка становится профилем Direct; query-параметры транспорта (включая XHTTP `extra`) сохраняются как есть.
+7. **Base64 списка URI** — п. 6, закодированный обычным Base64 (типичная выдача 3x-ui).
 
 Если ни один формат не подошёл — импорт завершается ошибкой `InvalidFormat`.
 

@@ -103,6 +103,12 @@ fun CreateProfileScreen(
             SectionGroup(title = stringResource(R.string.profile_manual_setup)) {
                 SectionItem(
                     position = ItemPosition.Top,
+                    onClick = { onSelectType("VLESS", null, profileName) }
+                ) {
+                    RowLabel(text = stringResource(R.string.kernel_direct))
+                }
+
+                SectionItem(
                     onClick = { onSelectType("Turnable", null, profileName) }
                 ) {
                     RowLabel(text = stringResource(R.string.kernel_turnable))

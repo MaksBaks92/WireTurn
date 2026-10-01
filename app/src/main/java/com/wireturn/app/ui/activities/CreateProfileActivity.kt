@@ -35,6 +35,10 @@ class CreateProfileActivity : ComponentActivity() {
                     onBack = { finish() },
                     onSelectType = { type, configJson, name ->
                         val intent = when (type) {
+                            "VLESS" -> android.content.Intent(this, com.wireturn.app.ui.activities.XraySetupActivity::class.java).apply {
+                                putExtra("EXTRA_KERNEL_VARIANT", com.wireturn.app.data.KernelVariant.DIRECT.name)
+                                putExtra("EXTRA_DEFAULT_PROTOCOL", com.wireturn.app.data.XrayConfiguration.VLESS.name)
+                            }
                             "Turnable" -> android.content.Intent(this, TurnableConfigActivity::class.java)
                             "olcRTC" -> android.content.Intent(this, OlcRtcConfigActivity::class.java)
                             "WebDAV" -> android.content.Intent(this, WebdavConfigActivity::class.java)

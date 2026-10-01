@@ -1090,9 +1090,12 @@ fun HomeScreen(
             }
 
             val isSocks5Native = activeConfig.kernelVariant.isSocks5Native
+            val isDirect = activeConfig.kernelVariant.isDirect
 
             // --- Xray & VPN Settings ---
-            val isSettingsValid = if (isSocks5Native) {
+            val isSettingsValid = if (isDirect) {
+                activeXrayConfig.protocol == XrayConfiguration.VLESS && activeVlessConfig.isValid()
+            } else if (isSocks5Native) {
                 // For OLCRTC/WebDAV/qWDTT/OpenFlux, link is only required if DualRoute or
                 // Socks5Chain is enabled - matches XrayService's own isConfigValid check.
                 if (activeXrayConfig.protocol == XrayConfiguration.VLESS &&
@@ -1142,10 +1145,16 @@ fun HomeScreen(
                             configValid,
                             xrayConfig.enabled,
                             currentProfileId,
-                            autoLaunchSettings.enabled
+                            autoLaunchSettings.enabled,
+                            isDirect
                         ) {
                             delay(300.milliseconds)
-                            if (!configValid && xrayConfig.enabled && !autoLaunchSettings.enabled) {
+                            if (isDirect) {
+                                // Direct profiles are Xray-only - keep the toggle on.
+                                if (!xrayConfig.enabled && configValid && !autoLaunchSettings.enabled) {
+                                    viewModel.updateXrayConfig(viewModel.xrayConfig.value.copy(enabled = true))
+                                }
+                            } else if (!configValid && xrayConfig.enabled && !autoLaunchSettings.enabled) {
                                 viewModel.updateXrayConfig(viewModel.xrayConfig.value.copy(enabled = false))
                             }
                         }
@@ -1153,8 +1162,9 @@ fun HomeScreen(
                         SwitchRow(
                             labelPrefix = stringResource(R.string.xray_title),
                             label = if (configValid && profilesExist) xrayProtocol else "",
-                            checked = xrayConfig.enabled,
+                            checked = if (isDirect) true else xrayConfig.enabled,
                             onCheckedChange = { next ->
+                                if (isDirect) return@SwitchRow
                                 HapticUtil.perform(
                                     context,
                                     if (next) HapticUtil.Pattern.TOGGLE_ON else HapticUtil.Pattern.TOGGLE_OFF

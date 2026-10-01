@@ -74,6 +74,9 @@ class XraySetupActivity : ComponentActivity() {
                 val csqtt = if (json != null) Gson().fromJson(json, com.wireturn.app.data.kernel.CsqttConfig::class.java) ?: com.wireturn.app.data.kernel.CsqttConfig() else com.wireturn.app.data.kernel.CsqttConfig()
                 ClientConfig(kernelConfig = KernelConfig.Csqtt(csqtt))
             }
+            KernelVariant.DIRECT.name -> {
+                ClientConfig(kernelConfig = KernelConfig.Direct)
+            }
             else -> {
                 val json = intent.getStringExtra("EXTRA_TURNABLE_CONFIG_JSON")
                 val turnable = if (json != null) Gson().fromJson(json, TurnableConfig::class.java) ?: TurnableConfig() else TurnableConfig()
@@ -104,10 +107,15 @@ class XraySetupActivity : ComponentActivity() {
                     onRemoveHistoryItem = { viewModel.removeVlessLinkFromHistory(it) },
                     onBack = { finish() },
                     onSave = { type, wg, vless ->
+                        val enabledXray = if (clientConfigFromIntent.kernelVariant.isDirect) {
+                            savedXrayConfig.copy(enabled = true, protocol = com.wireturn.app.data.XrayConfiguration.VLESS)
+                        } else {
+                            savedXrayConfig.copy(protocol = type)
+                        }
                         viewModel.addFullProfile(
                             name = profileName,
                             clientConfig = clientConfigFromIntent,
-                            xrayConfig = savedXrayConfig.copy(protocol = type),
+                            xrayConfig = enabledXray,
                             wgConfig = wg,
                             vlessConfig = vless
                         )

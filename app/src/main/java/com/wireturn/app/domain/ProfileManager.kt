@@ -1,5 +1,6 @@
 package com.wireturn.app.domain
 
+import androidx.core.net.toUri
 import com.google.gson.JsonParser
 import com.wireturn.app.R
 import com.wireturn.app.data.AppPreferences
@@ -693,7 +694,12 @@ class ProfileManager(
                                         // Raw line-based subscription first (as-is, the common case), then as a
                                         // last resort try decoding it as plain (non-deflated) base64 - some panels
                                         // (e.g. 3x-ui) base64-encode their line-based subscription body directly.
-                                        tryParseTextSubscription(content) ?: tryParseBase64TextSubscription(content)
+                                        // Finally accept a plain/base64 list of vless:// / trojan:// / hy2:// links
+                                        // as standalone Direct profiles (no tunnel kernel).
+                                        tryParseTextSubscription(content)
+                                            ?: tryParseBase64TextSubscription(content)
+                                            ?: tryParseUriSubscription(content)
+                                            ?: tryParseBase64UriSubscription(content)
                                     }
                                 }
                             }
@@ -979,6 +985,25 @@ class ProfileManager(
             val trimmed = line.trim()
             if (trimmed.isEmpty()) continue
 
+            // Bare VLESS/Trojan/Hysteria2 line inside a WireTurn text subscription: a Direct profile.
+            if (com.wireturn.app.ui.ValidatorUtils.isValidVlessLink(trimmed) &&
+                KernelRegistry.decodeUri(trimmed) == null
+            ) {
+                flush()
+                val name = displayNameFromProxyLink(trimmed)
+                profiles.add(
+                    Profile(
+                        id = stableTextSubEntryId(trimmed),
+                        name = name,
+                        kernelConfig = KernelConfig.Direct,
+                        xrayEnabled = true,
+                        xrayProtocol = com.wireturn.app.data.XrayConfiguration.VLESS,
+                        vlessConfig = com.wireturn.app.data.VlessConfig(vlessLink = trimmed)
+                    )
+                )
+                continue
+            }
+
             val kernelMatch = KernelRegistry.decodeUri(trimmed)
             if (kernelMatch != null) {
                 flush()
@@ -1163,6 +1188,67 @@ class ProfileManager(
             return null
         }
         return tryParseTextSubscription(decoded)
+    }
+
+    /**
+     * Standard v2rayN / 3x-ui style subscription: one `vless://` / `trojan://` / `hysteria2://` /
+     * `hy2://` link per line. Each becomes a Direct (standalone Xray) profile - the full URI,
+     * including XHTTP `extra` and every other transport query param, is kept as-is.
+     */
+    private fun tryParseUriSubscription(text: String): ProfileBundle? {
+        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+        if (lines.isEmpty()) return null
+
+        val profiles = mutableListOf<Profile>()
+        for (line in lines) {
+            if (!com.wireturn.app.ui.ValidatorUtils.isValidVlessLink(line)) {
+                // A mixed file with non-URI junk isn't a URI subscription - bail so JSON/text
+                // parsers above keep priority and we don't partially ingest garbage.
+                if (profiles.isNotEmpty()) return null
+                return null
+            }
+            val name = displayNameFromProxyLink(line)
+            profiles.add(
+                Profile(
+                    id = stableTextSubEntryId(line),
+                    name = name,
+                    kernelConfig = KernelConfig.Direct,
+                    xrayEnabled = true,
+                    xrayProtocol = com.wireturn.app.data.XrayConfiguration.VLESS,
+                    vlessConfig = com.wireturn.app.data.VlessConfig(vlessLink = line)
+                )
+            )
+        }
+        if (profiles.isEmpty()) return null
+        return ProfileBundle(profiles = profiles)
+    }
+
+    private fun tryParseBase64UriSubscription(content: String): ProfileBundle? {
+        val decoded = try {
+            val cleaned = content.trim().replace(Regex("\\s"), "")
+            String(android.util.Base64.decode(cleaned, android.util.Base64.DEFAULT), Charsets.UTF_8)
+        } catch (_: Exception) {
+            return null
+        }
+        return tryParseUriSubscription(decoded)
+    }
+
+    private fun displayNameFromProxyLink(link: String): String {
+        return try {
+            val uri = link.toUri()
+            val fragment = uri.fragment?.takeIf { it.isNotBlank() }?.let {
+                android.net.Uri.decode(it)
+            }
+            fragment?.takeIf { it.isNotBlank() }
+                ?: uri.host
+                ?: when (com.wireturn.app.ui.ValidatorUtils.detectUriProtocol(link)) {
+                    com.wireturn.app.ui.UriProtocol.TROJAN -> "Trojan"
+                    com.wireturn.app.ui.UriProtocol.HYSTERIA2 -> "Hysteria2"
+                    else -> "VLESS"
+                }
+        } catch (_: Exception) {
+            "VLESS"
+        }
     }
 
     /**

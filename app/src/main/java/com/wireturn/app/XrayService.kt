@@ -13,6 +13,7 @@ import com.wireturn.app.data.WgConfig
 import com.wireturn.app.data.XrayConfig
 import com.wireturn.app.data.XraySettings
 import com.wireturn.app.kernel.KernelRegistry
+import com.wireturn.app.ui.ValidatorUtils
 import com.wireturn.app.viewmodel.XrayState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -146,8 +147,12 @@ class XrayService : Service() {
             val isXrayVless = xrayConfig.protocol == com.wireturn.app.data.XrayConfiguration.VLESS
 
             val isSocks5Native = runningClientConfig.kernelVariant.isSocks5Native
+            val isDirect = runningClientConfig.kernelVariant.isDirect
 
-            val isConfigValid = if (isSocks5Native) {
+            val isConfigValid = if (isDirect) {
+                // Standalone VLESS: the link is the whole profile.
+                isXrayVless && vlessConfig.isValid()
+            } else if (isSocks5Native) {
                 // For OLCRTC/WebDAV, VLESS/WG config is optional, unless DualRoute or Socks5Chain is enabled
                 if (isXrayVless && (vlessConfig.isDualRoute || vlessConfig.isSocks5Chain)) {
                     vlessConfig.isValid()
@@ -246,8 +251,10 @@ class XrayService : Service() {
                     connectableSocksAddr
                 }
                 cmdArgs.add(socksAddr)
-            } else {
-                // For other kernels, always use local proxy address
+            } else if (!isDirect) {
+                // Turnable/FreeTurn: replace the link's destination with the local tunnel address.
+                // Direct dials the link host as-is so every transport (XHTTP/WS/gRPC/…) keeps its
+                // original SNI/Host/path/extra from the URI.
                 cmdArgs.add("-local-address")
                 cmdArgs.add(runningClientConfig.connectableAddress)
             }
@@ -257,13 +264,17 @@ class XrayService : Service() {
                     prefs.addVlessLinkToHistory(vlessConfig.vlessLink)
                 }
                 
-                val shouldAddLink = if (isSocks5Native) {
+                val shouldAddLink = if (isDirect) {
+                    true
+                } else if (isSocks5Native) {
                     (vlessConfig.isDualRoute || vlessConfig.isSocks5Chain) && vlessConfig.vlessLink.isNotBlank()
                 } else {
                     true
                 }
 
                 if (shouldAddLink) {
+                    // Pass the raw URI through unchanged - vless-client parses type/security/flow/
+                    // path/host/extra (incl. full XHTTP) itself.
                     cmdArgs.addAll(listOf("-link", vlessConfig.vlessLink))
                 }
 
@@ -281,6 +292,17 @@ class XrayService : Service() {
                         cmdArgs.add("-hc-destination")
                         cmdArgs.add(vlessConfig.hcDestination)
                     }
+                    // Dual-route needs a "local" outbound too. On Direct there is no tunnel address,
+                    // so fall back to the link's own host:port as the local route (directAddress is
+                    // the preferred direct one).
+                    if (isDirect) {
+                        ValidatorUtils.parseVlessAddress(vlessConfig.vlessLink)?.let { linkAddr ->
+                            if (linkAddr != vlessConfig.directAddress) {
+                                cmdArgs.add("-local-address")
+                                cmdArgs.add(linkAddr)
+                            }
+                        }
+                    }
                 }
 
                 // Only meaningful when -local-socks5 is actually the socks5-native kernel's
@@ -289,7 +311,7 @@ class XrayService : Service() {
                 if (isSocks5Native && vlessConfig.isSocks5Chain) {
                     cmdArgs.add("-socks5-chain")
                 }
-            } else if (!isSocks5Native) {
+            } else if (!isSocks5Native && !isDirect) {
                 cmdArgs.addAll(listOf(
                     "-wg-private-key", wgConfig.privateKey,
                     "-wg-public-key", wgConfig.publicKey,
@@ -388,10 +410,15 @@ class XrayService : Service() {
     }
 
     private fun handleDualRouteLog(line: String, socketName: String) {
+        val isDirectKernel = CoreServiceState.session.value?.clientConfig?.kernelVariant?.isDirect == true
         when {
             line.contains("active route: direct") -> {
                 XrayServiceState.updateStatus(XrayState.DirectRoute)
-                if (CoreServiceState.isRunning.value && CoreServiceState.status.value !is CoreStatus.Suppressed) {
+                // Direct has no tunnel binary to pause - both routes are inside Xray.
+                if (!isDirectKernel &&
+                    CoreServiceState.isRunning.value &&
+                    CoreServiceState.status.value !is CoreStatus.Suppressed
+                ) {
                     AppLogsState.addLog(getString(R.string.log_dual_route_direct_established))
                     CoreServiceState.setStatus(CoreStatus.Suppressed)
                 }
@@ -403,12 +430,12 @@ class XrayService : Service() {
                 val bothUnreachable = line.contains("both unreachable")
                 
                 if (directUnreachable || bothUnreachable) {
-                    if (CoreServiceState.status.value is CoreStatus.Suppressed) {
+                    if (!isDirectKernel && CoreServiceState.status.value is CoreStatus.Suppressed) {
                         AppLogsState.addLog(getString(R.string.log_dual_route_direct_lost))
                         CoreServiceState.setStatus(CoreStatus.Connecting)
                     }
                     
-                    if (!CoreServiceState.isRunning.value) {
+                    if (!isDirectKernel && !CoreServiceState.isRunning.value) {
                         AppLogsState.addLog(getString(R.string.log_dual_route_unreachable_start_tunnel))
                         serviceScope.launch {
                             val prefs = AppPreferences(applicationContext)
