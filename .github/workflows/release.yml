@@ -129,7 +129,11 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew assembleRelease -Pandroid.ndkVersion=${{ steps.vars.outputs.ndk_version }}
 
+      # Official signing secrets (SIGNING_KEY / ALIAS / KEY_STORE_PASSWORD / KEY_PASSWORD).
+      # When they're missing (typical for a fresh fork), fall back to an ephemeral CI keystore
+      # so the APKs are still installable and the unstable release can be published.
       - name: Sign APK
+        if: ${{ secrets.SIGNING_KEY != '' }}
         uses: r0adkll/sign-android-release@v1
         id: sign_app
         with:
@@ -140,6 +144,37 @@ jobs:
           keyPassword: ${{ secrets.KEY_PASSWORD }}
         env:
           BUILD_TOOLS_VERSION: ${{ steps.vars.outputs.build_tools }}
+
+      - name: Sign APK with ephemeral CI key
+        if: ${{ secrets.SIGNING_KEY == '' }}
+        env:
+          BUILD_TOOLS: ${{ steps.vars.outputs.build_tools }}
+        run: |
+          echo "::warning::SIGNING_KEY secret is not set — signing with an ephemeral CI keystore"
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/ci-signing.jks" \
+            -alias wireturn-ci \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=WireTurn CI, O=WireTurn, C=US"
+
+          APKSIGNER="${ANDROID_HOME}/build-tools/${BUILD_TOOLS}/apksigner"
+          shopt -s nullglob
+          for apk in app/build/outputs/apk/release/*.apk; do
+            base="$(basename "$apk" .apk)"
+            case "$base" in
+              *-signed|*-unsigned) continue ;;
+            esac
+            out="app/build/outputs/apk/release/${base}-signed.apk"
+            "$APKSIGNER" sign \
+              --ks "$RUNNER_TEMP/ci-signing.jks" \
+              --ks-key-alias wireturn-ci \
+              --ks-pass pass:android \
+              --key-pass pass:android \
+              --out "$out" \
+              "$apk"
+            echo "Signed (CI): $out"
+          done
 
       - name: Clean up and Rename APKs
         run: |
